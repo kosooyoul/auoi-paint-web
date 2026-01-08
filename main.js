@@ -7,6 +7,8 @@ const state = {
     color: '#000000',
     brushSize: 4,
     fillTolerance: 10,
+    fontFamily: 'Arial',
+    fontSize: 24,
     isDrawing: false,
     startX: 0,
     startY: 0,
@@ -20,7 +22,10 @@ const state = {
     pasteMode: false,
     pasteImage: null,
     pasteX: 0,
-    pasteY: 0
+    pasteY: 0,
+    textMode: false,
+    textX: 0,
+    textY: 0
 };
 
 // Initialize
@@ -54,6 +59,7 @@ function setupEventListeners() {
     document.getElementById('tool-fill').addEventListener('click', () => setTool('fill'));
     document.getElementById('tool-picker').addEventListener('click', () => setTool('picker'));
     document.getElementById('tool-select').addEventListener('click', () => setTool('select'));
+    document.getElementById('tool-text').addEventListener('click', () => setTool('text'));
 
     // Shape buttons
     document.getElementById('shape-rect').addEventListener('click', () => setTool('rect'));
@@ -78,6 +84,15 @@ function setupEventListeners() {
         document.getElementById('fill-tolerance-value').textContent = state.fillTolerance;
     });
 
+    // Font controls
+    document.getElementById('font-family').addEventListener('change', (e) => {
+        state.fontFamily = e.target.value;
+    });
+
+    document.getElementById('font-size').addEventListener('input', (e) => {
+        state.fontSize = parseInt(e.target.value);
+    });
+
     // Action buttons
     document.getElementById('btn-undo').addEventListener('click', undo);
     document.getElementById('btn-redo').addEventListener('click', redo);
@@ -91,6 +106,18 @@ function setupEventListeners() {
     document.getElementById('help-modal').addEventListener('click', (e) => {
         if (e.target.id === 'help-modal') {
             closeHelpModal();
+        }
+    });
+
+    // Text input
+    const textInput = document.getElementById('text-input');
+    textInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            commitText();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelText();
         }
     });
 
@@ -111,6 +138,7 @@ function setTool(tool) {
         'fill': 'tool-fill',
         'picker': 'tool-picker',
         'select': 'tool-select',
+        'text': 'tool-text',
         'rect': 'shape-rect',
         'ellipse': 'shape-ellipse',
         'line': 'shape-line'
@@ -143,6 +171,12 @@ function handlePointerDown(e) {
     // Handle paste mode
     if (state.pasteMode) {
         commitPaste();
+        return;
+    }
+
+    // Handle text tool
+    if (state.tool === 'text') {
+        showTextInput(x, y, rect);
         return;
     }
 
@@ -639,6 +673,7 @@ function handleKeyboard(e) {
         'f': 'fill',
         'i': 'picker',
         's': 'select',
+        't': 'text',
         'r': 'rect',
         'c': 'ellipse',
         'l': 'line'
@@ -658,6 +693,57 @@ function toggleHelpModal() {
 function closeHelpModal() {
     const modal = document.getElementById('help-modal');
     modal.classList.remove('active');
+}
+
+// Text Tool Functions
+function showTextInput(canvasX, canvasY, canvasRect) {
+    const textInput = document.getElementById('text-input');
+
+    // Store text position (canvas coordinates)
+    state.textX = canvasX;
+    state.textY = canvasY;
+    state.textMode = true;
+
+    // Position the input overlay (absolute coordinates)
+    const left = canvasRect.left + canvasX;
+    const top = canvasRect.top + canvasY;
+
+    textInput.style.left = `${left}px`;
+    textInput.style.top = `${top}px`;
+    textInput.style.fontFamily = state.fontFamily;
+    textInput.style.fontSize = `${state.fontSize}px`;
+    textInput.style.color = state.color;
+    textInput.value = '';
+    textInput.classList.add('active');
+    textInput.focus();
+}
+
+function commitText() {
+    const textInput = document.getElementById('text-input');
+    const text = textInput.value.trim();
+
+    if (text) {
+        // Draw text to canvas
+        ctx.font = `${state.fontSize}px ${state.fontFamily}`;
+        ctx.fillStyle = state.color;
+        ctx.textBaseline = 'top';
+        ctx.fillText(text, state.textX, state.textY);
+
+        // Save state for undo
+        saveState();
+    }
+
+    // Hide input
+    textInput.classList.remove('active');
+    textInput.value = '';
+    state.textMode = false;
+}
+
+function cancelText() {
+    const textInput = document.getElementById('text-input');
+    textInput.classList.remove('active');
+    textInput.value = '';
+    state.textMode = false;
 }
 
 // Reset composite operation on pointer up

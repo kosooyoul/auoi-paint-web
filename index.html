@@ -29,6 +29,9 @@
                 <button id="tool-select" class="tool-btn" title="Select (S)">
                     <span>⬚</span>
                 </button>
+                <button id="tool-text" class="tool-btn" title="Text (T)">
+                    <span>T</span>
+                </button>
             </div>
 
             <div class="tool-group">
@@ -59,6 +62,19 @@
                 <label for="fill-tolerance">Tolerance:</label>
                 <input type="range" id="fill-tolerance" min="0" max="60" value="10">
                 <span id="fill-tolerance-value">10</span>
+            </div>
+
+            <div class="tool-group">
+                <label for="font-family">Font:</label>
+                <select id="font-family">
+                    <option value="Arial">Arial</option>
+                    <option value="Courier New">Courier</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Times New Roman">Times</option>
+                    <option value="Verdana">Verdana</option>
+                </select>
+                <label for="font-size">Size:</label>
+                <input type="number" id="font-size" min="8" max="200" value="24" style="width: 60px;">
             </div>
 
             <div class="tool-group">
@@ -97,6 +113,7 @@
 
         <div class="canvas-container">
             <canvas id="canvas" width="800" height="600"></canvas>
+            <input type="text" id="text-input" class="text-input-overlay" />
         </div>
 
         <div class="status-bar">
@@ -121,6 +138,7 @@
                         <tr><td><kbd>F</kbd></td><td>Fill (Bucket)</td></tr>
                         <tr><td><kbd>I</kbd></td><td>Color Picker (Eyedropper)</td></tr>
                         <tr><td><kbd>S</kbd></td><td>Selection Tool</td></tr>
+                        <tr><td><kbd>T</kbd></td><td>Text Tool</td></tr>
                     </table>
                 </div>
 
@@ -141,7 +159,15 @@
                         <tr><td><kbd>Ctrl</kbd> + <kbd>C</kbd></td><td>Copy Selection</td></tr>
                         <tr><td><kbd>Ctrl</kbd> + <kbd>X</kbd></td><td>Cut Selection</td></tr>
                         <tr><td><kbd>Ctrl</kbd> + <kbd>V</kbd></td><td>Paste</td></tr>
-                        <tr><td><kbd>Esc</kbd></td><td>Cancel Paste</td></tr>
+                        <tr><td><kbd>Esc</kbd></td><td>Cancel Paste / Cancel Text</td></tr>
+                    </table>
+                </div>
+
+                <div class="shortcuts-section">
+                    <h3>Text Tool</h3>
+                    <table class="shortcuts-table">
+                        <tr><td><kbd>Enter</kbd></td><td>Commit Text to Canvas</td></tr>
+                        <tr><td><kbd>Esc</kbd></td><td>Cancel Text Input</td></tr>
                     </table>
                 </div>
 
