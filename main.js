@@ -84,6 +84,7 @@ function setupEventListeners() {
     document.getElementById('btn-clear').addEventListener('click', clearCanvas);
     document.getElementById('btn-save').addEventListener('click', saveImage);
     document.getElementById('btn-help').addEventListener('click', toggleHelpModal);
+    document.getElementById('btn-resize').addEventListener('click', resizeCanvas);
 
     // Help modal
     document.getElementById('close-help').addEventListener('click', closeHelpModal);
@@ -527,6 +528,70 @@ function saveImage() {
         a.click();
         URL.revokeObjectURL(url);
     });
+}
+
+// Resize Canvas
+function resizeCanvas() {
+    const newWidth = parseInt(document.getElementById('canvas-width').value);
+    const newHeight = parseInt(document.getElementById('canvas-height').value);
+    const resizeMode = document.querySelector('input[name="resize-mode"]:checked').value;
+
+    // Validate dimensions
+    if (!newWidth || !newHeight || newWidth < 100 || newHeight < 100 ||
+        newWidth > 2000 || newHeight > 2000) {
+        alert('Please enter valid dimensions (100-2000).');
+        return;
+    }
+
+    // Confirm resize
+    if (!confirm(`Resize canvas to ${newWidth}x${newHeight} (${resizeMode} mode)?`)) {
+        return;
+    }
+
+    // Save current canvas content
+    const oldWidth = canvas.width;
+    const oldHeight = canvas.height;
+
+    if (resizeMode === 'scale') {
+        // Scale mode: resize content proportionally
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = oldWidth;
+        tempCanvas.height = oldHeight;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(canvas, 0, 0);
+
+        // Resize canvas
+        canvas.width = newWidth;
+        canvas.height = newHeight;
+
+        // Fill with white background
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, newWidth, newHeight);
+
+        // Draw scaled content
+        ctx.drawImage(tempCanvas, 0, 0, oldWidth, oldHeight, 0, 0, newWidth, newHeight);
+    } else {
+        // Crop mode: keep content at original size, crop or expand
+        const imageData = ctx.getImageData(0, 0, oldWidth, oldHeight);
+
+        // Resize canvas
+        canvas.width = newWidth;
+        canvas.height = newHeight;
+
+        // Fill with white background
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, newWidth, newHeight);
+
+        // Put original content (will be cropped if new size is smaller)
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+    // Update dimension inputs
+    document.getElementById('canvas-width').value = newWidth;
+    document.getElementById('canvas-height').value = newHeight;
+
+    // Save state for undo
+    saveState();
 }
 
 // Keyboard Shortcuts
