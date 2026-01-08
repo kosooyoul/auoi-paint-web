@@ -15,7 +15,11 @@ const state = {
     historyStep: -1,
     clipboard: null,
     selection: null,
-    tempCanvas: null
+    tempCanvas: null,
+    pasteMode: false,
+    pasteImage: null,
+    pasteX: 0,
+    pasteY: 0
 };
 
 // Initialize
@@ -119,6 +123,12 @@ function handlePointerDown(e) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
+    // Handle paste mode
+    if (state.pasteMode) {
+        commitPaste();
+        return;
+    }
+
     state.isDrawing = true;
     state.startX = x;
     state.startY = y;
@@ -134,6 +144,10 @@ function handlePointerDown(e) {
         saveState();
     } else if (state.tool === 'picker') {
         pickColor(Math.floor(x), Math.floor(y));
+    } else if (state.tool === 'select') {
+        // Save canvas state for preview
+        state.tempCanvas = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        state.selection = null;
     } else if (['rect', 'ellipse', 'line'].includes(state.tool)) {
         // Save canvas state for preview
         state.tempCanvas = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -148,12 +162,22 @@ function handlePointerMove(e) {
     // Update status bar
     document.getElementById('status-coords').textContent = `X: ${Math.floor(x)}, Y: ${Math.floor(y)}`;
 
+    // Handle paste mode dragging
+    if (state.pasteMode) {
+        state.pasteX = x;
+        state.pasteY = y;
+        redrawWithPaste();
+        return;
+    }
+
     if (!state.isDrawing) return;
 
     if (state.tool === 'pen') {
         drawPen(x, y);
     } else if (state.tool === 'eraser') {
         drawEraser(x, y);
+    } else if (state.tool === 'select') {
+        previewSelection(x, y);
     } else if (state.tool === 'rect') {
         previewRect(x, y);
     } else if (state.tool === 'ellipse') {
@@ -174,6 +198,19 @@ function handlePointerUp(e) {
 
     if (state.tool === 'pen' || state.tool === 'eraser') {
         saveState();
+    } else if (state.tool === 'select') {
+        // Finalize selection
+        const width = x - state.startX;
+        const height = y - state.startY;
+        if (Math.abs(width) > 1 && Math.abs(height) > 1) {
+            state.selection = {
+                x: Math.min(state.startX, x),
+                y: Math.min(state.startY, y),
+                width: Math.abs(width),
+                height: Math.abs(height)
+            };
+        }
+        state.tempCanvas = null;
     } else if (['rect', 'ellipse', 'line'].includes(state.tool)) {
         // Finalize shape
         saveState();
@@ -257,6 +294,80 @@ function previewLine(x, y) {
     ctx.moveTo(state.startX, state.startY);
     ctx.lineTo(x, y);
     ctx.stroke();
+}
+
+// Selection Tool
+function previewSelection(x, y) {
+    ctx.putImageData(state.tempCanvas, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Draw selection marquee
+    const width = x - state.startX;
+    const height = y - state.startY;
+
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(state.startX, state.startY, width, height);
+    ctx.setLineDash([]);
+}
+
+function copySelection() {
+    if (!state.selection) return;
+
+    const { x, y, width, height } = state.selection;
+    state.clipboard = ctx.getImageData(x, y, width, height);
+}
+
+function cutSelection() {
+    if (!state.selection) return;
+
+    copySelection();
+
+    // Clear selection area
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillRect(state.selection.x, state.selection.y, state.selection.width, state.selection.height);
+    ctx.globalCompositeOperation = 'source-over';
+
+    state.selection = null;
+    saveState();
+}
+
+function pasteFromClipboard() {
+    if (!state.clipboard) return;
+
+    state.pasteMode = true;
+    state.pasteImage = state.clipboard;
+    state.pasteX = 50;
+    state.pasteY = 50;
+
+    // Save current canvas for redrawing
+    state.tempCanvas = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    redrawWithPaste();
+}
+
+function redrawWithPaste() {
+    if (!state.pasteMode || !state.pasteImage) return;
+
+    ctx.putImageData(state.tempCanvas, 0, 0);
+    ctx.putImageData(state.pasteImage, state.pasteX, state.pasteY);
+
+    // Draw outline
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(state.pasteX, state.pasteY, state.pasteImage.width, state.pasteImage.height);
+    ctx.setLineDash([]);
+}
+
+function commitPaste() {
+    if (!state.pasteMode) return;
+
+    state.pasteMode = false;
+    state.pasteImage = null;
+    state.tempCanvas = null;
+    saveState();
 }
 
 // Color Picker
@@ -397,6 +508,25 @@ function handleKeyboard(e) {
         } else if (e.key === 'y') {
             e.preventDefault();
             redo();
+        } else if (e.key === 'c') {
+            e.preventDefault();
+            copySelection();
+        } else if (e.key === 'x') {
+            e.preventDefault();
+            cutSelection();
+        } else if (e.key === 'v') {
+            e.preventDefault();
+            pasteFromClipboard();
+        }
+    }
+
+    // Escape to cancel paste mode
+    if (e.key === 'Escape' && state.pasteMode) {
+        state.pasteMode = false;
+        state.pasteImage = null;
+        if (state.tempCanvas) {
+            ctx.putImageData(state.tempCanvas, 0, 0);
+            state.tempCanvas = null;
         }
     }
 
@@ -412,7 +542,7 @@ function handleKeyboard(e) {
         'l': 'line'
     };
 
-    if (toolShortcuts[e.key.toLowerCase()]) {
+    if (toolShortcuts[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey) {
         setTool(toolShortcuts[e.key.toLowerCase()]);
     }
 }
