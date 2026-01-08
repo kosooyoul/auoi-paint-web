@@ -6,6 +6,7 @@ const state = {
     tool: 'pen',
     color: '#000000',
     brushSize: 4,
+    fillTolerance: 10,
     isDrawing: false,
     startX: 0,
     startY: 0,
@@ -69,6 +70,12 @@ function setupEventListeners() {
     document.getElementById('brush-size').addEventListener('input', (e) => {
         state.brushSize = parseInt(e.target.value);
         document.getElementById('brush-size-value').textContent = state.brushSize;
+    });
+
+    // Fill tolerance
+    document.getElementById('fill-tolerance').addEventListener('input', (e) => {
+        state.fillTolerance = parseInt(e.target.value);
+        document.getElementById('fill-tolerance-value').textContent = state.fillTolerance;
     });
 
     // Action buttons
@@ -386,8 +393,9 @@ function floodFill(startX, startY) {
     const pixels = imageData.data;
     const targetColor = getPixelColor(pixels, startX, startY);
     const fillColor = hexToRgb(state.color);
+    const tolerance = state.fillTolerance;
 
-    if (colorsMatch(targetColor, fillColor)) return;
+    if (colorsMatch(targetColor, fillColor, tolerance)) return;
 
     const stack = [[startX, startY]];
     const visited = new Set();
@@ -400,7 +408,7 @@ function floodFill(startX, startY) {
         if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) continue;
 
         const currentColor = getPixelColor(pixels, x, y);
-        if (!colorsMatch(currentColor, targetColor)) continue;
+        if (!colorsMatch(currentColor, targetColor, tolerance)) continue;
 
         visited.add(key);
         setPixelColor(pixels, x, y, fillColor);
@@ -434,8 +442,21 @@ function hexToRgb(hex) {
     return [r, g, b, 255];
 }
 
-function colorsMatch(c1, c2) {
-    return c1[0] === c2[0] && c1[1] === c2[1] && c1[2] === c2[2] && c1[3] === c2[3];
+function colorsMatch(c1, c2, tolerance = 0) {
+    // Alpha must match exactly
+    if (c1[3] !== c2[3]) return false;
+
+    // If tolerance is 0, use exact match for performance
+    if (tolerance === 0) {
+        return c1[0] === c2[0] && c1[1] === c2[1] && c1[2] === c2[2];
+    }
+
+    // Per-channel threshold comparison (no sqrt for performance)
+    const rDiff = Math.abs(c1[0] - c2[0]);
+    const gDiff = Math.abs(c1[1] - c2[1]);
+    const bDiff = Math.abs(c1[2] - c2[2]);
+
+    return rDiff <= tolerance && gDiff <= tolerance && bDiff <= tolerance;
 }
 
 // History Management

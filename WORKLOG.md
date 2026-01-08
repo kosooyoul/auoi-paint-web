@@ -1,5 +1,44 @@
 # Work Log
 
+## 2026-01-08 - Add Fill Tolerance Slider
+
+### What Changed
+- Added tolerance slider to bucket fill tool
+- Enhanced flood fill algorithm to support color tolerance
+
+### Technical Details
+
+#### UI Changes
+- Added "Tolerance" slider (0-60, default 10) with numeric display to toolbar
+- Slider updates live, showing current tolerance value
+
+#### Algorithm Enhancement
+- Modified `colorsMatch()` function to accept tolerance parameter
+- Per-channel RGB threshold comparison (no sqrt for performance)
+- Tolerance = 0 uses exact match (fast path)
+- Tolerance > 0 checks if all RGB channels are within threshold
+- Alpha channel must always match exactly
+
+#### Implementation
+- Added `fillTolerance` to app state (default: 10)
+- Flood fill now passes tolerance to color matching
+- Performance optimized: no expensive sqrt calculations per pixel
+
+### How Verified
+✅ Tolerance 0: Strict exact color matching works
+✅ Tolerance 10-30: Fills similar colors naturally
+✅ Tolerance 60: Fills broad color ranges
+✅ Large canvas (800x600) fill remains responsive
+✅ No console errors
+✅ Slider updates work in real-time
+
+### Known Limitations
+- Per-channel threshold may behave differently than Euclidean distance
+- Very high tolerance (>40) may fill too aggressively in gradient areas
+- No visual feedback of tolerance range before filling
+
+---
+
 ## 2026-01-08 - Initial MVP Release
 
 ### What Changed
