@@ -83,6 +83,15 @@ function setupEventListeners() {
     document.getElementById('btn-redo').addEventListener('click', redo);
     document.getElementById('btn-clear').addEventListener('click', clearCanvas);
     document.getElementById('btn-save').addEventListener('click', saveImage);
+    document.getElementById('btn-help').addEventListener('click', toggleHelpModal);
+
+    // Help modal
+    document.getElementById('close-help').addEventListener('click', closeHelpModal);
+    document.getElementById('help-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'help-modal') {
+            closeHelpModal();
+        }
+    });
 
     // Keyboard shortcuts
     document.addEventListener('keydown', handleKeyboard);
@@ -551,6 +560,13 @@ function handleKeyboard(e) {
         }
     }
 
+    // Help shortcut
+    if ((e.key === '?' || e.key.toLowerCase() === 'h') && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        toggleHelpModal();
+        return;
+    }
+
     // Tool shortcuts
     const toolShortcuts = {
         'p': 'pen',
@@ -566,6 +582,17 @@ function handleKeyboard(e) {
     if (toolShortcuts[e.key.toLowerCase()] && !e.ctrlKey && !e.metaKey) {
         setTool(toolShortcuts[e.key.toLowerCase()]);
     }
+}
+
+// Help Modal Functions
+function toggleHelpModal() {
+    const modal = document.getElementById('help-modal');
+    modal.classList.toggle('active');
+}
+
+function closeHelpModal() {
+    const modal = document.getElementById('help-modal');
+    modal.classList.remove('active');
 }
 
 // Reset composite operation on pointer up
