@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Paint</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Web Paint</h1>
+        </header>
+
+        <div class="toolbar">
+            <div class="tool-group">
+                <button id="tool-pen" class="tool-btn active" title="Pen (P)">
+                    <span>🖊️</span>
+                </button>
+                <button id="tool-eraser" class="tool-btn" title="Eraser (E)">
+                    <span>🧹</span>
+                </button>
+                <button id="tool-fill" class="tool-btn" title="Fill (F)">
+                    <span>🪣</span>
+                </button>
+                <button id="tool-picker" class="tool-btn" title="Color Picker (I)">
+                    <span>💧</span>
+                </button>
+                <button id="tool-select" class="tool-btn" title="Select (S)">
+                    <span>⬚</span>
+                </button>
+            </div>
+
+            <div class="tool-group">
+                <button id="shape-rect" class="tool-btn" title="Rectangle (R)">
+                    <span>▭</span>
+                </button>
+                <button id="shape-ellipse" class="tool-btn" title="Ellipse (C)">
+                    <span>○</span>
+                </button>
+                <button id="shape-line" class="tool-btn" title="Line (L)">
+                    <span>╱</span>
+                </button>
+            </div>
+
+            <div class="tool-group">
+                <label for="color-picker">Color:</label>
+                <input type="color" id="color-picker" value="#000000">
+                <div id="color-display" class="color-swatch"></div>
+            </div>
+
+            <div class="tool-group">
+                <label for="brush-size">Size:</label>
+                <input type="range" id="brush-size" min="1" max="50" value="4">
+                <span id="brush-size-value">4</span>
+            </div>
+
+            <div class="tool-group">
+                <button id="btn-undo" class="action-btn" title="Undo (Ctrl+Z)">↶ Undo</button>
+                <button id="btn-redo" class="action-btn" title="Redo (Ctrl+Y)">↷ Redo</button>
+            </div>
+
+            <div class="tool-group">
+                <button id="btn-clear" class="action-btn" title="New">🗎 New</button>
+                <button id="btn-save" class="action-btn" title="Save">💾 Save PNG</button>
+            </div>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="canvas" width="800" height="600"></canvas>
+        </div>
+
+        <div class="status-bar">
+            <span id="status-tool">Tool: Pen</span>
+            <span id="status-coords">X: 0, Y: 0</span>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
