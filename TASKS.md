@@ -6,27 +6,45 @@
 - ✅ Fill tolerance slider (0-60)
 - ✅ Copy/Cut/Paste with positioning
 - ✅ Save as PNG
+- ✅ Keyboard shortcuts help modal
+- ✅ Canvas resize functionality (Scale/Crop modes)
 
 ## Suggested Next Tasks (Priority Order)
 
-### 1. [HIGH] Keyboard Shortcuts Help UI
-**Why:** Users don't know available shortcuts (P, E, F, Ctrl+Z, etc.)
-**Effort:** Small (1-2 hours)
-**Value:** High - better UX
-**Scope:**
-- Add "Help" or "?" button to toolbar
-- Show modal/overlay with keyboard shortcuts list
-- Toggle with "?" or "H" key
-
-### 2. [MEDIUM] Canvas Resize Functionality
-**Why:** Fixed 800x600 limits use cases
+### 0. [HIGH] UI Refinement & Visual Polish
+**Why:** Current UI is functional but lacks premium feel - needs modern, clean aesthetic
 **Effort:** Medium (3-4 hours)
-**Value:** Medium - flexibility
+**Value:** High - First impression, professional appearance
 **Scope:**
-- Add width/height input fields
-- "Resize Canvas" button
-- Option to scale content or crop
-- Preserve undo history if possible
+- Modernize color palette (warmer/more vibrant accents)
+- Enhance depth with better shadows and gradients
+- Improve button states (hover, active, disabled)
+- Add subtle animations/transitions for smoothness
+- Optimize toolbar spacing and visual hierarchy
+- Polish canvas frame with premium styling
+- Ensure high contrast for accessibility
+- Optional: Consider dark mode toggle
+**Files:**
+- styles.css (primary changes)
+- Possibly add CSS variables for theming
+**Verification:**
+- Visual inspection in Live Server
+- Test all tool states (active, hover, disabled)
+- Check on different screen sizes
+- Verify readability and contrast
+
+### 1. [COMPLETED] ~~Keyboard Shortcuts Help UI~~
+**Status:** ✅ Completed (2026-01-08)
+- Help button added to toolbar
+- Modal with organized sections (Tools, Shapes, Edit, Help)
+- Keyboard toggle with ? or H key
+- Clean kbd styling
+
+### 2. [COMPLETED] ~~Canvas Resize Functionality~~
+**Status:** ✅ Completed (2026-01-08)
+- Width/Height input fields (100-2000px range)
+- Resize button with Scale/Crop mode options
+- Working implementation verified
 
 ### 3. [MEDIUM] Text Tool
 **Why:** Common paint feature, currently missing
