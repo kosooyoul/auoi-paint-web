@@ -25,7 +25,8 @@ const state = {
     pasteY: 0,
     textMode: false,
     textX: 0,
-    textY: 0
+    textY: 0,
+    lassoPath: []
 };
 
 // Initialize
@@ -59,6 +60,7 @@ function setupEventListeners() {
     document.getElementById('tool-fill').addEventListener('click', () => setTool('fill'));
     document.getElementById('tool-picker').addEventListener('click', () => setTool('picker'));
     document.getElementById('tool-select').addEventListener('click', () => setTool('select'));
+    document.getElementById('tool-lasso').addEventListener('click', () => setTool('lasso'));
     document.getElementById('tool-text').addEventListener('click', () => setTool('text'));
 
     // Shape buttons
@@ -138,6 +140,7 @@ function setTool(tool) {
         'fill': 'tool-fill',
         'picker': 'tool-picker',
         'select': 'tool-select',
+        'lasso': 'tool-lasso',
         'text': 'tool-text',
         'rect': 'shape-rect',
         'ellipse': 'shape-ellipse',
@@ -151,8 +154,8 @@ function setTool(tool) {
 
     document.getElementById('status-tool').textContent = `Tool: ${tool.charAt(0).toUpperCase() + tool.slice(1)}`;
 
-    // Clear selection if switching tools
-    if (tool !== 'select' && state.selection) {
+    // Clear selection if switching away from selection tools
+    if (tool !== 'select' && tool !== 'lasso' && state.selection) {
         state.selection = null;
     }
 }
@@ -193,12 +196,18 @@ function handlePointerDown(e) {
     } else if (state.tool === 'fill') {
         floodFill(Math.floor(x), Math.floor(y));
         saveState();
+        // Redraw selection marquee after fill
+        if (state.selection) drawSelectionMarquee();
     } else if (state.tool === 'picker') {
         pickColor(Math.floor(x), Math.floor(y));
     } else if (state.tool === 'select') {
         // Save canvas state for preview
         state.tempCanvas = ctx.getImageData(0, 0, canvas.width, canvas.height);
         state.selection = null;
+    } else if (state.tool === 'lasso') {
+        // Start lasso path
+        state.lassoPath = [{x, y}];
+        state.tempCanvas = ctx.getImageData(0, 0, canvas.width, canvas.height);
     } else if (['rect', 'ellipse', 'line'].includes(state.tool)) {
         // Save canvas state for preview
         state.tempCanvas = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -221,14 +230,26 @@ function handlePointerMove(e) {
         return;
     }
 
-    if (!state.isDrawing) return;
+    if (!state.isDrawing) {
+        // Redraw selection marquee if it exists and we're not drawing
+        if (state.selection && !state.pasteMode && state.tool !== 'select' && state.tool !== 'lasso') {
+            drawSelectionMarquee();
+        }
+        return;
+    }
 
     if (state.tool === 'pen') {
         drawPen(x, y);
+        // Redraw selection marquee after drawing
+        if (state.selection) drawSelectionMarquee();
     } else if (state.tool === 'eraser') {
         drawEraser(x, y);
+        // Redraw selection marquee after erasing
+        if (state.selection) drawSelectionMarquee();
     } else if (state.tool === 'select') {
         previewSelection(x, y);
+    } else if (state.tool === 'lasso') {
+        drawLassoPath(x, y);
     } else if (state.tool === 'rect') {
         previewRect(x, y);
     } else if (state.tool === 'ellipse') {
@@ -262,10 +283,15 @@ function handlePointerUp(e) {
             };
         }
         state.tempCanvas = null;
+    } else if (state.tool === 'lasso') {
+        // Finalize lasso selection
+        finalizeLassoSelection();
     } else if (['rect', 'ellipse', 'line'].includes(state.tool)) {
         // Finalize shape
         saveState();
         state.tempCanvas = null;
+        // Redraw selection marquee after shape
+        if (state.selection) drawSelectionMarquee();
     }
 }
 
@@ -363,11 +389,151 @@ function previewSelection(x, y) {
     ctx.setLineDash([]);
 }
 
+// Lasso Tool
+function drawLassoPath(x, y) {
+    // Add point to path (throttle to avoid too many points)
+    const lastPoint = state.lassoPath[state.lassoPath.length - 1];
+    const distance = Math.sqrt((x - lastPoint.x) ** 2 + (y - lastPoint.y) ** 2);
+
+    if (distance > 3) {
+        state.lassoPath.push({x, y});
+    }
+
+    // Redraw canvas and path
+    ctx.putImageData(state.tempCanvas, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+
+    // Draw lasso path
+    if (state.lassoPath.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(state.lassoPath[0].x, state.lassoPath[0].y);
+        for (let i = 1; i < state.lassoPath.length; i++) {
+            ctx.lineTo(state.lassoPath[i].x, state.lassoPath[i].y);
+        }
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+}
+
+function finalizeLassoSelection() {
+    if (state.lassoPath.length < 3) {
+        // Not enough points for a selection
+        state.lassoPath = [];
+        state.tempCanvas = null;
+        return;
+    }
+
+    // Close the path
+    ctx.putImageData(state.tempCanvas, 0, 0);
+
+    // Calculate bounding box
+    let minX = Infinity, minY = Infinity;
+    let maxX = -Infinity, maxY = -Infinity;
+
+    for (const point of state.lassoPath) {
+        minX = Math.min(minX, point.x);
+        minY = Math.min(minY, point.y);
+        maxX = Math.max(maxX, point.x);
+        maxY = Math.max(maxY, point.y);
+    }
+
+    minX = Math.floor(minX);
+    minY = Math.floor(minY);
+    maxX = Math.ceil(maxX);
+    maxY = Math.ceil(maxY);
+
+    // Store selection with lasso path (absolute coordinates for display)
+    state.selection = {
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+        lassoPath: state.lassoPath.map(p => ({x: p.x - minX, y: p.y - minY})),
+        lassoPathAbsolute: [...state.lassoPath] // Keep absolute path for drawing marquee
+    };
+
+    // Draw marquee
+    drawSelectionMarquee();
+
+    state.lassoPath = [];
+    state.tempCanvas = null;
+}
+
+// Draw selection marquee (for both rect and lasso)
+function drawSelectionMarquee() {
+    if (!state.selection) return;
+
+    ctx.globalCompositeOperation = 'source-over';
+
+    if (state.selection.lassoPathAbsolute) {
+        // Draw lasso marquee
+        const path = state.selection.lassoPathAbsolute;
+        ctx.beginPath();
+        ctx.moveTo(path[0].x, path[0].y);
+        for (let i = 1; i < path.length; i++) {
+            ctx.lineTo(path[i].x, path[i].y);
+        }
+        ctx.closePath();
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.setLineDash([]);
+    } else {
+        // Draw rectangle marquee
+        const { x, y, width, height } = state.selection;
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, width, height);
+        ctx.setLineDash([]);
+    }
+}
+
+// Point in polygon test (ray casting algorithm)
+function pointInPolygon(x, y, polygon) {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i].x, yi = polygon[i].y;
+        const xj = polygon[j].x, yj = polygon[j].y;
+
+        const intersect = ((yi > y) !== (yj > y))
+            && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
 function copySelection() {
     if (!state.selection) return;
 
-    const { x, y, width, height } = state.selection;
-    state.clipboard = ctx.getImageData(x, y, width, height);
+    const { x, y, width, height, lassoPath } = state.selection;
+
+    if (lassoPath) {
+        // Lasso selection: copy only pixels inside the polygon
+        const imageData = ctx.getImageData(x, y, width, height);
+        const data = imageData.data;
+
+        // Create a mask for the lasso selection
+        for (let py = 0; py < height; py++) {
+            for (let px = 0; px < width; px++) {
+                const inside = pointInPolygon(px, py, lassoPath);
+                if (!inside) {
+                    // Make pixels outside the lasso transparent
+                    const index = (py * width + px) * 4;
+                    data[index + 3] = 0; // Set alpha to 0
+                }
+            }
+        }
+
+        state.clipboard = imageData;
+    } else {
+        // Rectangle selection: copy entire area
+        state.clipboard = ctx.getImageData(x, y, width, height);
+    }
 }
 
 function cutSelection() {
@@ -375,10 +541,31 @@ function cutSelection() {
 
     copySelection();
 
-    // Clear selection area
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillRect(state.selection.x, state.selection.y, state.selection.width, state.selection.height);
-    ctx.globalCompositeOperation = 'source-over';
+    const { x, y, width, height, lassoPath } = state.selection;
+
+    if (lassoPath) {
+        // Lasso selection: erase only pixels inside the polygon
+        const imageData = ctx.getImageData(x, y, width, height);
+        const data = imageData.data;
+
+        for (let py = 0; py < height; py++) {
+            for (let px = 0; px < width; px++) {
+                const inside = pointInPolygon(px, py, lassoPath);
+                if (inside) {
+                    // Make pixels inside the lasso transparent
+                    const index = (py * width + px) * 4;
+                    data[index + 3] = 0; // Set alpha to 0
+                }
+            }
+        }
+
+        ctx.putImageData(imageData, x, y);
+    } else {
+        // Rectangle selection: erase entire area
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.fillRect(x, y, width, height);
+        ctx.globalCompositeOperation = 'source-over';
+    }
 
     state.selection = null;
     saveState();
@@ -526,6 +713,7 @@ function undo() {
     if (state.historyStep > 0) {
         state.historyStep--;
         ctx.putImageData(state.history[state.historyStep], 0, 0);
+        state.selection = null; // Clear selection on undo
         updateUndoRedoButtons();
     }
 }
@@ -534,6 +722,7 @@ function redo() {
     if (state.historyStep < state.history.length - 1) {
         state.historyStep++;
         ctx.putImageData(state.history[state.historyStep], 0, 0);
+        state.selection = null; // Clear selection on redo
         updateUndoRedoButtons();
     }
 }
@@ -548,6 +737,7 @@ function clearCanvas() {
     if (confirm('Clear canvas? This cannot be undone.')) {
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        state.selection = null; // Clear selection
         saveState();
     }
 }
@@ -624,6 +814,9 @@ function resizeCanvas() {
     document.getElementById('canvas-width').value = newWidth;
     document.getElementById('canvas-height').value = newHeight;
 
+    // Clear selection after resize
+    state.selection = null;
+
     // Save state for undo
     saveState();
 }
@@ -673,6 +866,7 @@ function handleKeyboard(e) {
         'f': 'fill',
         'i': 'picker',
         's': 'select',
+        'a': 'lasso',
         't': 'text',
         'r': 'rect',
         'c': 'ellipse',
@@ -731,6 +925,9 @@ function commitText() {
 
         // Save state for undo
         saveState();
+
+        // Redraw selection marquee after text
+        if (state.selection) drawSelectionMarquee();
     }
 
     // Hide input
