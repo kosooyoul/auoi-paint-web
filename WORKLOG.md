@@ -1,5 +1,102 @@
 # Work Log
 
+## 2026-01-12 - Canvas-Centric UX Redesign
+
+### What Changed
+- Complete UI redesign with floating, draggable panels
+- Canvas now occupies full screen (95%+ space)
+- Removed fixed header and toolbar in favor of floating elements
+- Modern glass-morphism design with backdrop blur effects
+- Toolbox can be dragged anywhere, minimized, or hidden with Tab key
+
+### Technical Details
+
+#### HTML Restructure (index.html)
+- **Full-screen canvas container**: Positioned fixed, 100vw x 100vh, centered flexbox
+- **Floating header**: Top-left corner, minimal "Web Paint" branding
+- **Floating toolbox**: Draggable panel (280px width) with organized sections:
+  - Drawing tools (Pen, Eraser, Fill, Picker)
+  - Shapes (Rectangle, Ellipse, Line)
+  - Selection tools (Select, Lasso, Text)
+  - Color & Size controls
+  - Text settings
+  - Actions (Undo, Redo, Clear, Save, Help)
+  - Canvas resize
+  - Zoom controls
+- **Floating status bar**: Bottom-center pill with tool/coords/zoom info
+- **Toolbox header**: Drag handle + minimize/expand button
+- Removed: Fixed header, fixed toolbar container
+
+#### CSS Redesign (styles.css)
+- **Full-screen layout**: Canvas container fills viewport (z-index: 1)
+- **Glass-morphism effects**:
+  - `backdrop-filter: blur(10-20px)` on all floating panels
+  - Semi-transparent backgrounds (rgba)
+  - Subtle border overlays
+- **Floating toolbox styling**:
+  - Fixed positioning with top/right initial placement
+  - `.hidden` class for Tab toggle (opacity 0, translateX)
+  - `.minimized` class hides content, shows only header
+  - Smooth transitions (250ms) for all state changes
+- **Visual enhancements**:
+  - Vibrant gradient body background (#667eea → #f093fb)
+  - Enhanced shadows (shadow-xl) for depth
+  - Compact button sizing, grid layouts for tool groups
+  - Scrollable toolbox content (max-height calc)
+- **Responsive toolbox**: Constrains to viewport bounds
+
+#### JavaScript Implementation (main.js)
+- **Toolbox drag system** (`setupFloatingToolbox()`):
+  - Drag handle (toolbox header) with pointerdown/move/up events
+  - `toolboxDragState` tracks dragging state and offsets
+  - Viewport bounds checking (constrain to screen)
+  - Cursor changes (move → grabbing)
+  - Prevents drag when clicking toggle button
+- **Toggle minimize/expand**:
+  - Click − button to minimize (shows header only)
+  - Click + button to expand (shows full content)
+  - Toggles `.minimized` class, updates button text
+- **Tab key handler**:
+  - `toggleToolboxVisibility()` toggles `.hidden` class
+  - Keyboard shortcut added to `handleKeyboard()`
+  - Doesn't trigger in text mode
+- **localStorage persistence**:
+  - `saveToolboxPosition()`: Saves left/top coords on drag end
+  - `restoreToolboxPosition()`: Restores position on init
+  - Validates position within viewport before applying
+  - Falls back to default (top-right) if invalid
+- **Init sequence**: `setupFloatingToolbox()` + `restoreToolboxPosition()` in `init()`
+
+### How Verified
+✅ Canvas fills 95%+ of viewport
+✅ Toolbox draggable to any screen position
+✅ Toolbox constrained to viewport (can't drag off-screen)
+✅ Minimize button collapses toolbox to header only
+✅ Expand button restores full toolbox
+✅ Tab key hides/shows toolbox smoothly
+✅ Toolbox position persists after page refresh
+✅ All drawing tools work correctly with new layout
+✅ Zoom and pan functionality unaffected
+✅ Modal (help) still works correctly
+✅ Text input overlay positioned correctly
+✅ Status bar visible and functional
+✅ No console errors
+✅ Glass-morphism effects render correctly (blur, transparency)
+
+### Performance
+- Backdrop-filter is GPU-accelerated (smooth rendering)
+- Drag events throttled naturally by pointer events
+- localStorage writes only on drag end (not during drag)
+- No impact on canvas drawing performance
+
+### Known Limitations
+- Backdrop-filter may not work on very old browsers (graceful degradation)
+- Toolbox width is fixed at 280px (not resizable)
+- No multi-monitor position memory (resets to viewport bounds)
+- Cannot drag toolbox while minimized (must expand first - by design)
+
+---
+
 ## 2026-01-09 - Add Zoom & Pan Functionality
 
 ### What Changed
