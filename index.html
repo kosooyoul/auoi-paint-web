@@ -112,6 +112,16 @@
                 </label>
                 <button id="btn-resize" class="action-btn" title="Resize Canvas">↔️ Resize</button>
             </div>
+
+            <div class="tool-group">
+                <label>Zoom:</label>
+                <button id="btn-zoom-out" class="action-btn" title="Zoom Out (Ctrl+-)">−</button>
+                <input type="range" id="zoom-slider" min="10" max="500" value="100" style="width: 120px;">
+                <span id="zoom-value">100%</span>
+                <button id="btn-zoom-in" class="action-btn" title="Zoom In (Ctrl++)">+</button>
+                <button id="btn-zoom-fit" class="action-btn" title="Fit to Screen">Fit</button>
+                <button id="btn-zoom-reset" class="action-btn" title="Reset Zoom (Ctrl+0)">100%</button>
+            </div>
         </div>
 
         <div class="canvas-container">
@@ -122,6 +132,7 @@
         <div class="status-bar">
             <span id="status-tool">Tool: Pen</span>
             <span id="status-coords">X: 0, Y: 0</span>
+            <span id="status-zoom">Zoom: 100%</span>
         </div>
     </div>
 
@@ -172,6 +183,17 @@
                     <table class="shortcuts-table">
                         <tr><td><kbd>Enter</kbd></td><td>Commit Text to Canvas</td></tr>
                         <tr><td><kbd>Esc</kbd></td><td>Cancel Text Input</td></tr>
+                    </table>
+                </div>
+
+                <div class="shortcuts-section">
+                    <h3>View</h3>
+                    <table class="shortcuts-table">
+                        <tr><td><kbd>Ctrl</kbd> + <kbd>Wheel</kbd></td><td>Zoom In/Out (toward cursor)</td></tr>
+                        <tr><td><kbd>Ctrl</kbd> + <kbd>+</kbd></td><td>Zoom In</td></tr>
+                        <tr><td><kbd>Ctrl</kbd> + <kbd>-</kbd></td><td>Zoom Out</td></tr>
+                        <tr><td><kbd>Ctrl</kbd> + <kbd>0</kbd></td><td>Reset Zoom to 100%</td></tr>
+                        <tr><td><kbd>Space</kbd> + <kbd>Drag</kbd></td><td>Pan Canvas</td></tr>
                     </table>
                 </div>
 

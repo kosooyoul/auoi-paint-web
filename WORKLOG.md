@@ -1,5 +1,128 @@
 # Work Log
 
+## 2026-01-09 - Add Zoom & Pan Functionality
+
+### What Changed
+- Implemented zoom functionality (10% - 500% range)
+- Added pan functionality with Space + drag
+- All drawing tools work correctly at any zoom level
+- Comprehensive UI controls for zoom and pan
+
+### Technical Details
+
+#### Architecture: Hybrid CSS Transform + Coordinate Mapping
+- **Canvas bitmap stays at native resolution** (e.g., 800x600)
+- **Zoom/pan applied via CSS transforms** (GPU-accelerated)
+- **Coordinate transformation at event input layer**
+- All drawing operations work in canvas pixel space (unchanged)
+
+#### Core Implementation (main.js)
+
+**State Management:**
+- Added 8 new state variables: `zoomLevel`, `panX`, `panY`, `isPanning`, `panStartX`, `panStartY`, `spaceKeyPressed`, `originalCursor`
+- Default zoom: 1.0 (100%), range: 0.1-5.0 (10%-500%)
+
+**Coordinate Transformation System:**
+```javascript
+screenToCanvas(screenX, screenY) → {x, y}  // Maps screen coords to canvas coords
+applyCanvasTransform()                      // Applies CSS transform
+setZoom(level, centerX, centerY)            // Zoom toward point
+```
+
+**Event Handlers Updated:**
+- `handlePointerDown`: Pan mode detection, coordinate transformation
+- `handlePointerMove`: Pan dragging, coordinate transformation
+- `handlePointerUp`: Pan end handling, coordinate transformation
+- `handleWheel`: Ctrl+wheel zoom toward cursor (NEW)
+- `handleKeyboard`: Spacebar tracking, zoom shortcuts (Ctrl+0/+/-)
+
+**Zoom Controls Functions:**
+- `zoomIn()` / `zoomOut()`: 20% increment/decrement
+- `resetZoom()`: Reset to 100%, center canvas
+- `fitToScreen()`: Calculate zoom to fit in viewport
+- `setupZoomControls()`: Wire up all UI controls
+
+**Drawing Adjustments for Zoom:**
+- `showTextInput()`: Text overlay positioned at zoomed screen coords, font scaled
+- `drawSelectionMarquee()`: Dash pattern and line width scale with zoom (1/zoomLevel)
+- `redrawWithPaste()`: Paste preview marquee scaled for zoom
+- `resizeCanvas()`: Calls `resetZoom()` after resize
+
+#### UI Implementation (index.html)
+
+**Zoom Controls Toolbar:**
+- Zoom Out button (−)
+- Zoom slider (10-500, step 1)
+- Zoom percentage display
+- Zoom In button (+)
+- Fit to Screen button
+- Reset (100%) button
+
+**Status Bar:**
+- Added zoom level display: "Zoom: 100%"
+
+**Help Modal:**
+- New "View" section with 5 shortcuts:
+  - Ctrl+Wheel: Zoom In/Out
+  - Ctrl++: Zoom In
+  - Ctrl+-: Zoom Out
+  - Ctrl+0: Reset Zoom
+  - Space+Drag: Pan Canvas
+
+#### CSS Styling (styles.css)
+
+**Canvas Container:**
+- Changed `overflow: auto` → `overflow: hidden` (pan with Space+drag instead)
+
+**Canvas Element:**
+- Removed hover scale effect (conflicts with zoom)
+- Added `image-rendering: pixelated; crisp-edges` for crisp pixels at zoom
+- Removed transition (zoom handled by JS)
+
+**Zoom Controls:**
+- Slider: teal accent color, 120px width
+- Zoom value display: bold, teal, 50px min-width
+- Zoom buttons: 44px min-width, teal-blue gradient on hover
+
+**Status Bar:**
+- Added `gap: 24px` for zoom display spacing
+
+### How Verified
+✅ Ctrl+Wheel zooms smoothly toward cursor position
+✅ +/- buttons and slider work correctly
+✅ Space+drag pans canvas (cursor: grab → grabbing)
+✅ Fit to Screen centers and scales appropriately
+✅ Reset (100%) restores zoom and pan
+✅ Keyboard shortcuts: Ctrl+0/+/- work
+✅ Status bar displays correct zoom percentage
+✅ All drawing tools work at any zoom level:
+  - Pen draws at correct position
+  - Shapes preview and draw accurately
+  - Fill tool fills correct area
+  - Color picker samples correct pixel
+  - Text input appears at correct position, font scales visually
+  - Selection (rect/lasso) works correctly
+  - Copy/cut/paste work at zoom
+  - Paste dragging works
+✅ Selection marquee renders correctly at all zoom levels
+✅ Undo/redo preserve zoom/pan state
+✅ Canvas resize resets zoom appropriately
+✅ No console errors
+
+### Known Limitations
+- Pan only via Space+drag (no middle-click drag support)
+- No zoom animation/easing (instant zoom change)
+- Fit to Screen doesn't zoom in beyond 100% (by design)
+- Very high zoom (>300%) may show pixelation (expected for bitmap)
+
+### Performance
+- GPU-accelerated CSS transforms ensure smooth zoom/pan
+- Coordinate transformation is simple arithmetic (fast)
+- No performance impact on drawing operations
+- Flood fill and history unaffected (work on raw bitmap)
+
+---
+
 ## 2026-01-09 - UI Refinement & Visual Polish
 
 ### What Changed

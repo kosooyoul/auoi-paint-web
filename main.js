@@ -26,8 +26,110 @@ const state = {
     textMode: false,
     textX: 0,
     textY: 0,
-    lassoPath: []
+    lassoPath: [],
+
+    // Zoom & Pan state
+    zoomLevel: 1.0,           // 0.1 to 5.0 (10% to 500%)
+    panX: 0,                  // Pan offset in screen pixels
+    panY: 0,                  // Pan offset in screen pixels
+    isPanning: false,         // Space key + drag active
+    panStartX: 0,             // Pan gesture start point
+    panStartY: 0,
+    spaceKeyPressed: false,   // Track spacebar state
+    originalCursor: 'crosshair'
 };
+
+// ===========================
+// Zoom & Pan Utilities
+// ===========================
+
+/**
+ * Transform screen coordinates to canvas coordinates
+ * Accounts for zoom and pan transformations
+ */
+function screenToCanvas(screenX, screenY) {
+    const rect = canvas.getBoundingClientRect();
+
+    // Get position relative to canvas element
+    const relX = screenX - rect.left;
+    const relY = screenY - rect.top;
+
+    // Account for CSS transform: scale and translate
+    // Canvas is transformed as: translate(panX, panY) scale(zoomLevel)
+    // To reverse: (point - translate) / scale
+    const canvasX = (relX - state.panX) / state.zoomLevel;
+    const canvasY = (relY - state.panY) / state.zoomLevel;
+
+    return { x: canvasX, y: canvasY };
+}
+
+/**
+ * Apply current zoom and pan as CSS transform
+ */
+function applyCanvasTransform() {
+    canvas.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoomLevel})`;
+    canvas.style.transformOrigin = '0 0';
+}
+
+/**
+ * Get zoom percentage string for display
+ */
+function getZoomPercentage() {
+    return Math.round(state.zoomLevel * 100) + '%';
+}
+
+/**
+ * Set zoom level and update UI
+ */
+function setZoom(newZoom, centerX = null, centerY = null) {
+    // Clamp zoom level
+    newZoom = Math.max(0.1, Math.min(5.0, newZoom));
+
+    if (newZoom === state.zoomLevel) return;
+
+    // If center point provided, adjust pan to zoom toward that point
+    if (centerX !== null && centerY !== null) {
+        // Calculate canvas point under cursor before zoom
+        const canvasPoint = screenToCanvas(centerX, centerY);
+
+        // Apply new zoom
+        state.zoomLevel = newZoom;
+
+        // Adjust pan so that the canvas point stays under the cursor
+        const rect = canvas.getBoundingClientRect();
+        const relX = centerX - rect.left;
+        const relY = centerY - rect.top;
+
+        state.panX = relX - (canvasPoint.x * state.zoomLevel);
+        state.panY = relY - (canvasPoint.y * state.zoomLevel);
+    } else {
+        state.zoomLevel = newZoom;
+    }
+
+    applyCanvasTransform();
+    updateZoomDisplay();
+}
+
+/**
+ * Update zoom level display in status bar
+ */
+function updateZoomDisplay() {
+    const zoomDisplay = document.getElementById('status-zoom');
+    if (zoomDisplay) {
+        zoomDisplay.textContent = `Zoom: ${getZoomPercentage()}`;
+    }
+}
+
+/**
+ * Update canvas cursor based on current mode
+ */
+function updateCanvasCursor() {
+    if (state.spaceKeyPressed && !state.textMode) {
+        canvas.style.cursor = 'grab';
+    } else {
+        canvas.style.cursor = state.originalCursor || 'crosshair';
+    }
+}
 
 // Initialize
 function init() {
@@ -53,6 +155,7 @@ function setupEventListeners() {
     canvas.addEventListener('pointermove', handlePointerMove);
     canvas.addEventListener('pointerup', handlePointerUp);
     canvas.addEventListener('pointerout', handlePointerOut);
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
 
     // Tool buttons
     document.getElementById('tool-pen').addEventListener('click', () => setTool('pen'));
@@ -125,6 +228,16 @@ function setupEventListeners() {
 
     // Keyboard shortcuts
     document.addEventListener('keydown', handleKeyboard);
+    document.addEventListener('keyup', (e) => {
+        if (e.key === ' ') {
+            state.spaceKeyPressed = false;
+            state.isPanning = false;
+            updateCanvasCursor();
+        }
+    });
+
+    // Setup zoom controls
+    setupZoomControls();
 }
 
 // Tool Management
@@ -166,10 +279,40 @@ function updateColorDisplay() {
 }
 
 // Canvas Event Handlers
+
+/**
+ * Handle wheel event for zooming
+ */
+function handleWheel(e) {
+    // Only zoom with Ctrl/Cmd + wheel
+    if (!e.ctrlKey && !e.metaKey) return;
+
+    e.preventDefault();
+
+    // Determine zoom direction and amount
+    const delta = -e.deltaY;
+    const zoomSpeed = 0.001;
+    const zoomChange = delta * zoomSpeed;
+    const newZoom = state.zoomLevel * (1 + zoomChange);
+
+    // Zoom toward cursor position
+    setZoom(newZoom, e.clientX, e.clientY);
+}
+
 function handlePointerDown(e) {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Check if panning mode (Space key held)
+    if (state.spaceKeyPressed && !state.pasteMode && !state.textMode) {
+        state.isPanning = true;
+        state.panStartX = e.clientX - state.panX;
+        state.panStartY = e.clientY - state.panY;
+        canvas.style.cursor = 'grabbing';
+        return;
+    }
+
+    // Transform coordinates
+    const coords = screenToCanvas(e.clientX, e.clientY);
+    const x = coords.x;
+    const y = coords.y;
 
     // Handle paste mode
     if (state.pasteMode) {
@@ -179,7 +322,7 @@ function handlePointerDown(e) {
 
     // Handle text tool
     if (state.tool === 'text') {
-        showTextInput(x, y, rect);
+        showTextInput(x, y, e.clientX, e.clientY);
         return;
     }
 
@@ -215,9 +358,18 @@ function handlePointerDown(e) {
 }
 
 function handlePointerMove(e) {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Handle panning
+    if (state.isPanning) {
+        state.panX = e.clientX - state.panStartX;
+        state.panY = e.clientY - state.panStartY;
+        applyCanvasTransform();
+        return;
+    }
+
+    // Transform coordinates
+    const coords = screenToCanvas(e.clientX, e.clientY);
+    const x = coords.x;
+    const y = coords.y;
 
     // Update status bar
     document.getElementById('status-coords').textContent = `X: ${Math.floor(x)}, Y: ${Math.floor(y)}`;
@@ -260,11 +412,19 @@ function handlePointerMove(e) {
 }
 
 function handlePointerUp(e) {
+    // End panning
+    if (state.isPanning) {
+        state.isPanning = false;
+        updateCanvasCursor();
+        return;
+    }
+
     if (!state.isDrawing) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Transform coordinates
+    const coords = screenToCanvas(e.clientX, e.clientY);
+    const x = coords.x;
+    const y = coords.y;
 
     state.isDrawing = false;
 
@@ -468,6 +628,10 @@ function drawSelectionMarquee() {
 
     ctx.globalCompositeOperation = 'source-over';
 
+    // Adjust line width and dash pattern based on zoom for consistent visual thickness
+    const visualLineWidth = Math.max(1, 1 / state.zoomLevel);
+    const dashSize = 5 / state.zoomLevel;
+
     if (state.selection.lassoPathAbsolute) {
         // Draw lasso marquee
         const path = state.selection.lassoPathAbsolute;
@@ -477,17 +641,17 @@ function drawSelectionMarquee() {
             ctx.lineTo(path[i].x, path[i].y);
         }
         ctx.closePath();
-        ctx.setLineDash([5, 5]);
+        ctx.setLineDash([dashSize, dashSize]);
         ctx.strokeStyle = '#000';
-        ctx.lineWidth = 1;
+        ctx.lineWidth = visualLineWidth;
         ctx.stroke();
         ctx.setLineDash([]);
     } else {
         // Draw rectangle marquee
         const { x, y, width, height } = state.selection;
-        ctx.setLineDash([5, 5]);
+        ctx.setLineDash([dashSize, dashSize]);
         ctx.strokeStyle = '#000';
-        ctx.lineWidth = 1;
+        ctx.lineWidth = visualLineWidth;
         ctx.strokeRect(x, y, width, height);
         ctx.setLineDash([]);
     }
@@ -591,10 +755,12 @@ function redrawWithPaste() {
     ctx.putImageData(state.tempCanvas, 0, 0);
     ctx.putImageData(state.pasteImage, state.pasteX, state.pasteY);
 
-    // Draw outline
-    ctx.setLineDash([5, 5]);
+    // Draw outline - adjust dash and width for zoom
+    const visualLineWidth = Math.max(1, 1 / state.zoomLevel);
+    const dashSize = 5 / state.zoomLevel;
+    ctx.setLineDash([dashSize, dashSize]);
     ctx.strokeStyle = '#000';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = visualLineWidth;
     ctx.strokeRect(state.pasteX, state.pasteY, state.pasteImage.width, state.pasteImage.height);
     ctx.setLineDash([]);
 }
@@ -817,13 +983,43 @@ function resizeCanvas() {
     // Clear selection after resize
     state.selection = null;
 
+    // Reset zoom/pan after resize for clarity
+    resetZoom();
+
     // Save state for undo
     saveState();
 }
 
 // Keyboard Shortcuts
 function handleKeyboard(e) {
+    // Track spacebar for pan mode
+    if (e.key === ' ' && !state.textMode) {
+        if (!state.spaceKeyPressed) {
+            state.spaceKeyPressed = true;
+            state.originalCursor = canvas.style.cursor;
+            if (!state.isPanning) {
+                canvas.style.cursor = 'grab';
+            }
+        }
+    }
+
     if (e.ctrlKey || e.metaKey) {
+        // Zoom shortcuts
+        if (e.key === '0') {
+            e.preventDefault();
+            resetZoom();
+            return;
+        } else if (e.key === '+' || e.key === '=') {
+            e.preventDefault();
+            zoomIn();
+            return;
+        } else if (e.key === '-' || e.key === '_') {
+            e.preventDefault();
+            zoomOut();
+            return;
+        }
+
+        // Undo/redo
         if (e.key === 'z') {
             e.preventDefault();
             undo();
@@ -878,6 +1074,74 @@ function handleKeyboard(e) {
     }
 }
 
+// ===========================
+// Zoom Controls
+// ===========================
+
+function zoomIn() {
+    const newZoom = state.zoomLevel * 1.2;
+    setZoom(newZoom);
+}
+
+function zoomOut() {
+    const newZoom = state.zoomLevel / 1.2;
+    setZoom(newZoom);
+}
+
+function resetZoom() {
+    state.zoomLevel = 1.0;
+    state.panX = 0;
+    state.panY = 0;
+    applyCanvasTransform();
+    updateZoomDisplay();
+}
+
+function fitToScreen() {
+    const container = document.querySelector('.canvas-container');
+    const containerRect = container.getBoundingClientRect();
+
+    // Account for padding (32px on each side = 64px total)
+    const availableWidth = containerRect.width - 64;
+    const availableHeight = containerRect.height - 64;
+
+    // Calculate zoom to fit
+    const zoomX = availableWidth / canvas.width;
+    const zoomY = availableHeight / canvas.height;
+    const fitZoom = Math.min(zoomX, zoomY, 1.0); // Don't zoom in beyond 100%
+
+    // Center the canvas
+    state.zoomLevel = fitZoom;
+    state.panX = (containerRect.width - canvas.width * fitZoom) / 2;
+    state.panY = (containerRect.height - canvas.height * fitZoom) / 2;
+
+    applyCanvasTransform();
+    updateZoomDisplay();
+}
+
+function setupZoomControls() {
+    // Zoom buttons
+    const btnZoomIn = document.getElementById('btn-zoom-in');
+    const btnZoomOut = document.getElementById('btn-zoom-out');
+    const btnZoomReset = document.getElementById('btn-zoom-reset');
+    const btnZoomFit = document.getElementById('btn-zoom-fit');
+
+    if (btnZoomIn) btnZoomIn.addEventListener('click', zoomIn);
+    if (btnZoomOut) btnZoomOut.addEventListener('click', zoomOut);
+    if (btnZoomReset) btnZoomReset.addEventListener('click', resetZoom);
+    if (btnZoomFit) btnZoomFit.addEventListener('click', fitToScreen);
+
+    // Zoom slider
+    const zoomSlider = document.getElementById('zoom-slider');
+    if (zoomSlider) {
+        zoomSlider.addEventListener('input', (e) => {
+            const percent = parseInt(e.target.value);
+            setZoom(percent / 100);
+            const zoomValue = document.getElementById('zoom-value');
+            if (zoomValue) zoomValue.textContent = percent + '%';
+        });
+    }
+}
+
 // Help Modal Functions
 function toggleHelpModal() {
     const modal = document.getElementById('help-modal');
@@ -890,7 +1154,7 @@ function closeHelpModal() {
 }
 
 // Text Tool Functions
-function showTextInput(canvasX, canvasY, canvasRect) {
+function showTextInput(canvasX, canvasY, screenX, screenY) {
     const textInput = document.getElementById('text-input');
 
     // Store text position (canvas coordinates)
@@ -898,14 +1162,16 @@ function showTextInput(canvasX, canvasY, canvasRect) {
     state.textY = canvasY;
     state.textMode = true;
 
-    // Position the input overlay (absolute coordinates)
-    const left = canvasRect.left + canvasX;
-    const top = canvasRect.top + canvasY;
+    // Position the input overlay at screen coordinates
+    // Account for zoom: font should appear at zoomed size
+    const rect = canvas.getBoundingClientRect();
+    const left = rect.left + (canvasX * state.zoomLevel) + state.panX;
+    const top = rect.top + (canvasY * state.zoomLevel) + state.panY;
 
     textInput.style.left = `${left}px`;
     textInput.style.top = `${top}px`;
     textInput.style.fontFamily = state.fontFamily;
-    textInput.style.fontSize = `${state.fontSize}px`;
+    textInput.style.fontSize = `${state.fontSize * state.zoomLevel}px`; // Scale font
     textInput.style.color = state.color;
     textInput.value = '';
     textInput.classList.add('active');
