@@ -7,133 +7,138 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Web Paint</h1>
-        </header>
+    <!-- Full-screen Canvas Container -->
+    <div class="canvas-container">
+        <canvas id="canvas" width="800" height="600"></canvas>
+        <input type="text" id="text-input" class="text-input-overlay" />
+    </div>
 
-        <div class="toolbar">
-            <div class="tool-group">
-                <button id="tool-pen" class="tool-btn active" title="Pen (P)">
-                    <span>🖊️</span>
-                </button>
-                <button id="tool-eraser" class="tool-btn" title="Eraser (E)">
-                    <span>🧹</span>
-                </button>
-                <button id="tool-fill" class="tool-btn" title="Fill (F)">
-                    <span>🪣</span>
-                </button>
-                <button id="tool-picker" class="tool-btn" title="Color Picker (I)">
-                    <span>💧</span>
-                </button>
-                <button id="tool-select" class="tool-btn" title="Select (S)">
-                    <span>⬚</span>
-                </button>
-                <button id="tool-lasso" class="tool-btn" title="Lasso (A)">
-                    <span>⚬</span>
-                </button>
-                <button id="tool-text" class="tool-btn" title="Text (T)">
-                    <span>T</span>
-                </button>
-            </div>
+    <!-- Floating Header -->
+    <div id="floating-header" class="floating-header">
+        <h1>Web Paint</h1>
+    </div>
 
-            <div class="tool-group">
-                <button id="shape-rect" class="tool-btn" title="Rectangle (R)">
-                    <span>▭</span>
-                </button>
-                <button id="shape-ellipse" class="tool-btn" title="Ellipse (C)">
-                    <span>○</span>
-                </button>
-                <button id="shape-line" class="tool-btn" title="Line (L)">
-                    <span>╱</span>
-                </button>
-            </div>
-
-            <div class="tool-group">
-                <label for="color-picker">Color:</label>
-                <input type="color" id="color-picker" value="#000000">
-                <div id="color-display" class="color-swatch"></div>
-            </div>
-
-            <div class="tool-group">
-                <label for="brush-size">Size:</label>
-                <input type="range" id="brush-size" min="1" max="50" value="4">
-                <span id="brush-size-value">4</span>
-            </div>
-
-            <div class="tool-group">
-                <label for="fill-tolerance">Tolerance:</label>
-                <input type="range" id="fill-tolerance" min="0" max="60" value="10">
-                <span id="fill-tolerance-value">10</span>
-            </div>
-
-            <div class="tool-group">
-                <label for="font-family">Font:</label>
-                <select id="font-family">
-                    <option value="Arial">Arial</option>
-                    <option value="Courier New">Courier</option>
-                    <option value="Georgia">Georgia</option>
-                    <option value="Times New Roman">Times</option>
-                    <option value="Verdana">Verdana</option>
-                </select>
-                <label for="font-size">Size:</label>
-                <input type="number" id="font-size" min="8" max="200" value="24" style="width: 60px;">
-            </div>
-
-            <div class="tool-group">
-                <button id="btn-undo" class="action-btn" title="Undo (Ctrl+Z)">↶ Undo</button>
-                <button id="btn-redo" class="action-btn" title="Redo (Ctrl+Y)">↷ Redo</button>
-            </div>
-
-            <div class="tool-group">
-                <button id="btn-clear" class="action-btn" title="New">🗎 New</button>
-                <button id="btn-save" class="action-btn" title="Save">💾 Save PNG</button>
-            </div>
-
-            <div class="tool-group">
-                <button id="btn-help" class="action-btn" title="Help (? or H)">❓ Help</button>
-            </div>
-
-            <div class="tool-group">
-                <label for="canvas-width">Width:</label>
-                <input type="number" id="canvas-width" min="100" max="2000" value="800" style="width: 70px;">
-                <label for="canvas-height">Height:</label>
-                <input type="number" id="canvas-height" min="100" max="2000" value="600" style="width: 70px;">
-            </div>
-
-            <div class="tool-group">
-                <label>
-                    <input type="radio" name="resize-mode" value="scale" checked>
-                    Scale
-                </label>
-                <label>
-                    <input type="radio" name="resize-mode" value="crop">
-                    Crop
-                </label>
-                <button id="btn-resize" class="action-btn" title="Resize Canvas">↔️ Resize</button>
-            </div>
-
-            <div class="tool-group">
-                <label>Zoom:</label>
-                <button id="btn-zoom-out" class="action-btn" title="Zoom Out (Ctrl+-)">−</button>
-                <input type="range" id="zoom-slider" min="10" max="500" value="100" style="width: 120px;">
-                <span id="zoom-value">100%</span>
-                <button id="btn-zoom-in" class="action-btn" title="Zoom In (Ctrl++)">+</button>
-                <button id="btn-zoom-fit" class="action-btn" title="Fit to Screen">Fit</button>
-                <button id="btn-zoom-reset" class="action-btn" title="Reset Zoom (Ctrl+0)">100%</button>
-            </div>
+    <!-- Floating Toolbox (Draggable) -->
+    <div id="floating-toolbox" class="floating-toolbox">
+        <div class="toolbox-header" id="toolbox-drag-handle">
+            <span class="toolbox-title">🎨 Tools</span>
+            <button id="toolbox-toggle" class="toolbox-toggle-btn" title="Minimize/Expand (Tab)">−</button>
         </div>
 
-        <div class="canvas-container">
-            <canvas id="canvas" width="800" height="600"></canvas>
-            <input type="text" id="text-input" class="text-input-overlay" />
-        </div>
+        <div id="toolbox-content" class="toolbox-content">
+            <!-- Drawing Tools -->
+            <div class="tool-section">
+                <div class="section-label">Drawing</div>
+                <div class="tool-buttons">
+                    <button id="tool-pen" class="tool-btn active" title="Pen (P)">🖊️</button>
+                    <button id="tool-eraser" class="tool-btn" title="Eraser (E)">🧹</button>
+                    <button id="tool-fill" class="tool-btn" title="Fill (F)">🪣</button>
+                    <button id="tool-picker" class="tool-btn" title="Color Picker (I)">💧</button>
+                </div>
+            </div>
 
-        <div class="status-bar">
-            <span id="status-tool">Tool: Pen</span>
-            <span id="status-coords">X: 0, Y: 0</span>
-            <span id="status-zoom">Zoom: 100%</span>
+            <!-- Shapes -->
+            <div class="tool-section">
+                <div class="section-label">Shapes</div>
+                <div class="tool-buttons">
+                    <button id="shape-rect" class="tool-btn" title="Rectangle (R)">▭</button>
+                    <button id="shape-ellipse" class="tool-btn" title="Ellipse (C)">○</button>
+                    <button id="shape-line" class="tool-btn" title="Line (L)">╱</button>
+                </div>
+            </div>
+
+            <!-- Selection -->
+            <div class="tool-section">
+                <div class="section-label">Selection</div>
+                <div class="tool-buttons">
+                    <button id="tool-select" class="tool-btn" title="Select (S)">⬚</button>
+                    <button id="tool-lasso" class="tool-btn" title="Lasso (A)">⚬</button>
+                    <button id="tool-text" class="tool-btn" title="Text (T)">T</button>
+                </div>
+            </div>
+
+            <!-- Color & Size -->
+            <div class="tool-section">
+                <div class="section-label">Color & Size</div>
+                <div class="control-row">
+                    <input type="color" id="color-picker" value="#000000">
+                    <div id="color-display" class="color-swatch"></div>
+                </div>
+                <div class="control-row">
+                    <label>Size</label>
+                    <input type="range" id="brush-size" min="1" max="50" value="4">
+                    <span id="brush-size-value">4</span>
+                </div>
+                <div class="control-row">
+                    <label>Tolerance</label>
+                    <input type="range" id="fill-tolerance" min="0" max="60" value="10">
+                    <span id="fill-tolerance-value">10</span>
+                </div>
+            </div>
+
+            <!-- Text Settings -->
+            <div class="tool-section">
+                <div class="section-label">Text</div>
+                <div class="control-row">
+                    <select id="font-family">
+                        <option value="Arial">Arial</option>
+                        <option value="Courier New">Courier</option>
+                        <option value="Georgia">Georgia</option>
+                        <option value="Times New Roman">Times</option>
+                        <option value="Verdana">Verdana</option>
+                    </select>
+                    <input type="number" id="font-size" min="8" max="200" value="24" style="width: 60px;">
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="tool-section">
+                <div class="section-label">Actions</div>
+                <div class="action-buttons">
+                    <button id="btn-undo" class="action-btn" title="Undo (Ctrl+Z)">↶</button>
+                    <button id="btn-redo" class="action-btn" title="Redo (Ctrl+Y)">↷</button>
+                    <button id="btn-clear" class="action-btn" title="New">🗎</button>
+                    <button id="btn-save" class="action-btn" title="Save">💾</button>
+                    <button id="btn-help" class="action-btn" title="Help (? or H)">❓</button>
+                </div>
+            </div>
+
+            <!-- Canvas Resize -->
+            <div class="tool-section">
+                <div class="section-label">Canvas Size</div>
+                <div class="control-row">
+                    <input type="number" id="canvas-width" min="100" max="2000" value="800" placeholder="Width">
+                    <input type="number" id="canvas-height" min="100" max="2000" value="600" placeholder="Height">
+                </div>
+                <div class="control-row">
+                    <label><input type="radio" name="resize-mode" value="scale" checked> Scale</label>
+                    <label><input type="radio" name="resize-mode" value="crop"> Crop</label>
+                </div>
+                <button id="btn-resize" class="action-btn" title="Resize Canvas" style="width: 100%;">↔️ Resize</button>
+            </div>
+
+            <!-- Zoom Controls -->
+            <div class="tool-section">
+                <div class="section-label">Zoom</div>
+                <div class="control-row">
+                    <button id="btn-zoom-out" class="action-btn" title="Zoom Out (Ctrl+-)">−</button>
+                    <input type="range" id="zoom-slider" min="10" max="500" value="100">
+                    <span id="zoom-value">100%</span>
+                    <button id="btn-zoom-in" class="action-btn" title="Zoom In (Ctrl++)">+</button>
+                </div>
+                <div class="control-row">
+                    <button id="btn-zoom-fit" class="action-btn" title="Fit to Screen">Fit</button>
+                    <button id="btn-zoom-reset" class="action-btn" title="Reset Zoom (Ctrl+0)">100%</button>
+                </div>
+            </div>
         </div>
+    </div>
+
+    <!-- Floating Status Bar -->
+    <div id="floating-status" class="floating-status">
+        <span id="status-tool">Tool: Pen</span>
+        <span id="status-coords">X: 0, Y: 0</span>
+        <span id="status-zoom">Zoom: 100%</span>
     </div>
 
     <!-- Help Modal -->

@@ -146,6 +146,12 @@ function init() {
     // Update UI
     updateColorDisplay();
     updateUndoRedoButtons();
+
+    // Setup floating toolbox
+    setupFloatingToolbox();
+
+    // Restore toolbox position from localStorage
+    restoreToolboxPosition();
 }
 
 // Setup Event Listeners
@@ -1003,6 +1009,13 @@ function handleKeyboard(e) {
         }
     }
 
+    // Tab to toggle toolbox visibility
+    if (e.key === 'Tab' && !state.textMode) {
+        e.preventDefault();
+        toggleToolboxVisibility();
+        return;
+    }
+
     if (e.ctrlKey || e.metaKey) {
         // Zoom shortcuts
         if (e.key === '0') {
@@ -1213,6 +1226,112 @@ function cancelText() {
 canvas.addEventListener('pointerup', () => {
     ctx.globalCompositeOperation = 'source-over';
 });
+
+// ===========================
+// Floating Toolbox Functions
+// ===========================
+
+let toolboxDragState = {
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    offsetX: 0,
+    offsetY: 0
+};
+
+function setupFloatingToolbox() {
+    const toolbox = document.getElementById('floating-toolbox');
+    const dragHandle = document.getElementById('toolbox-drag-handle');
+    const toggleBtn = document.getElementById('toolbox-toggle');
+
+    // Drag functionality
+    dragHandle.addEventListener('pointerdown', (e) => {
+        // Don't drag if clicking the toggle button
+        if (e.target === toggleBtn || e.target.parentElement === toggleBtn) {
+            return;
+        }
+
+        toolboxDragState.isDragging = true;
+        const rect = toolbox.getBoundingClientRect();
+        toolboxDragState.offsetX = e.clientX - rect.left;
+        toolboxDragState.offsetY = e.clientY - rect.top;
+        dragHandle.style.cursor = 'grabbing';
+    });
+
+    document.addEventListener('pointermove', (e) => {
+        if (!toolboxDragState.isDragging) return;
+
+        const newX = e.clientX - toolboxDragState.offsetX;
+        const newY = e.clientY - toolboxDragState.offsetY;
+
+        // Constrain to viewport
+        const maxX = window.innerWidth - toolbox.offsetWidth;
+        const maxY = window.innerHeight - toolbox.offsetHeight;
+
+        const constrainedX = Math.max(0, Math.min(newX, maxX));
+        const constrainedY = Math.max(0, Math.min(newY, maxY));
+
+        toolbox.style.left = constrainedX + 'px';
+        toolbox.style.top = constrainedY + 'px';
+        toolbox.style.right = 'auto';  // Override initial right positioning
+    });
+
+    document.addEventListener('pointerup', () => {
+        if (toolboxDragState.isDragging) {
+            toolboxDragState.isDragging = false;
+            dragHandle.style.cursor = 'move';
+
+            // Save position to localStorage
+            saveToolboxPosition();
+        }
+    });
+
+    // Toggle minimize/expand
+    toggleBtn.addEventListener('click', () => {
+        toolbox.classList.toggle('minimized');
+        toggleBtn.textContent = toolbox.classList.contains('minimized') ? '+' : '−';
+    });
+}
+
+function toggleToolboxVisibility() {
+    const toolbox = document.getElementById('floating-toolbox');
+    toolbox.classList.toggle('hidden');
+}
+
+function saveToolboxPosition() {
+    const toolbox = document.getElementById('floating-toolbox');
+    const rect = toolbox.getBoundingClientRect();
+
+    const position = {
+        left: rect.left,
+        top: rect.top
+    };
+
+    localStorage.setItem('toolboxPosition', JSON.stringify(position));
+}
+
+function restoreToolboxPosition() {
+    const saved = localStorage.getItem('toolboxPosition');
+    if (!saved) return;
+
+    try {
+        const position = JSON.parse(saved);
+        const toolbox = document.getElementById('floating-toolbox');
+
+        // Validate position is within viewport
+        const maxX = window.innerWidth - toolbox.offsetWidth;
+        const maxY = window.innerHeight - toolbox.offsetHeight;
+
+        const validX = Math.max(0, Math.min(position.left, maxX));
+        const validY = Math.max(0, Math.min(position.top, maxY));
+
+        toolbox.style.left = validX + 'px';
+        toolbox.style.top = validY + 'px';
+        toolbox.style.right = 'auto';  // Override initial right positioning
+    } catch (e) {
+        console.error('Failed to restore toolbox position:', e);
+    }
+}
 
 // Start application
 init();
