@@ -4,8 +4,11 @@ const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
 // Application Constants
 const CONSTANTS = {
-    // History
-    MAX_HISTORY_SIZE: 50,
+    // History (reduced for multi-layer memory efficiency)
+    MAX_HISTORY_SIZE: 10,
+
+    // Layers
+    MAX_LAYERS: 20,
 
     // Zoom & Pan
     ZOOM_MIN: 0.1,              // 10%
@@ -49,6 +52,13 @@ const state = {
     textX: 0,
     textY: 0,
     lassoPath: [],
+
+    // Layer system
+    layers: [],               // Array of layer objects
+    activeLayerIndex: 0,      // Index of currently active layer
+    layerIdCounter: 0,        // For generating unique layer IDs
+    compositeCanvas: null,    // Off-screen canvas for compositing layers
+    compositeCtx: null,       // Context for composite canvas
 
     // Zoom & Pan state
     zoomLevel: 1.0,           // ZOOM_MIN to ZOOM_MAX
@@ -201,11 +211,89 @@ function updateCanvasCursor() {
     }
 }
 
+// ===========================
+// Layer System Functions
+// ===========================
+
+/**
+ * Create a new empty layer with transparent background
+ * @param {string} name - Layer name
+ * @returns {Object} Layer object
+ */
+function createEmptyLayer(name) {
+    const layerCanvas = document.createElement('canvas');
+    layerCanvas.width = canvas.width;
+    layerCanvas.height = canvas.height;
+    const layerCtx = layerCanvas.getContext('2d', { willReadFrequently: true });
+
+    return {
+        id: `layer-${Date.now()}-${state.layerIdCounter++}`,
+        name: name,
+        canvas: layerCanvas,
+        ctx: layerCtx,
+        visible: true,
+        opacity: 1.0
+    };
+}
+
+/**
+ * Initialize the layer system with one background layer
+ */
+function initializeLayerSystem() {
+    // Create composite canvas (off-screen)
+    state.compositeCanvas = document.createElement('canvas');
+    state.compositeCanvas.width = canvas.width;
+    state.compositeCanvas.height = canvas.height;
+    state.compositeCtx = state.compositeCanvas.getContext('2d', { willReadFrequently: true });
+
+    // Create initial background layer with white fill
+    const backgroundLayer = createEmptyLayer('Background');
+    backgroundLayer.ctx.fillStyle = 'white';
+    backgroundLayer.ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    state.layers.push(backgroundLayer);
+    state.activeLayerIndex = 0;
+}
+
+/**
+ * Composite all visible layers onto the display canvas
+ */
+function compositeAllLayers() {
+    // Clear composite canvas
+    state.compositeCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw each visible layer with opacity (bottom to top)
+    for (let i = 0; i < state.layers.length; i++) {
+        const layer = state.layers[i];
+        if (!layer.visible) continue;
+
+        state.compositeCtx.globalAlpha = layer.opacity;
+        state.compositeCtx.drawImage(layer.canvas, 0, 0);
+    }
+
+    // Reset alpha
+    state.compositeCtx.globalAlpha = 1.0;
+
+    // Copy composite to display canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(state.compositeCanvas, 0, 0);
+}
+
+/**
+ * Get the currently active layer
+ * @returns {Object} Active layer object
+ */
+function getActiveLayer() {
+    return state.layers[state.activeLayerIndex];
+}
+
 // Initialize
 function init() {
-    // Fill canvas with white background
-    ctx.fillStyle = 'white';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Initialize layer system (creates background layer with white fill)
+    initializeLayerSystem();
+
+    // Composite layers to display canvas
+    compositeAllLayers();
 
     // Save initial state
     saveState();
@@ -216,6 +304,7 @@ function init() {
     // Update UI
     updateColorDisplay();
     updateUndoRedoButtons();
+    updateLayerUI();
 
     // Setup floating toolbox
     setupFloatingToolbox();
@@ -281,6 +370,16 @@ function setupEventListeners() {
     document.getElementById('btn-save').addEventListener('click', saveImage);
     document.getElementById('btn-help').addEventListener('click', toggleHelpModal);
     document.getElementById('btn-resize').addEventListener('click', resizeCanvas);
+
+    // Layer buttons
+    document.getElementById('btn-layer-add').addEventListener('click', addLayer);
+    document.getElementById('btn-layer-delete').addEventListener('click', () => {
+        deleteLayer(state.activeLayerIndex);
+    });
+    document.getElementById('btn-layer-merge').addEventListener('click', () => {
+        mergeLayerDown(state.activeLayerIndex);
+    });
+    document.getElementById('btn-layer-flatten').addEventListener('click', flattenAllLayers);
 
     // Help modal
     document.getElementById('close-help').addEventListener('click', closeHelpModal);
@@ -430,8 +529,9 @@ function handlePointerDown(e) {
         state.lassoPath = [{x, y}];
         state.tempCanvas = ctx.getImageData(0, 0, canvas.width, canvas.height);
     } else if (['rect', 'ellipse', 'line'].includes(state.tool)) {
-        // Save canvas state for preview
-        state.tempCanvas = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        // Save active layer state for preview
+        const layer = getActiveLayer();
+        state.tempCanvas = layer.ctx.getImageData(0, 0, canvas.width, canvas.height);
     }
 }
 
@@ -541,78 +641,94 @@ function handlePointerOut(e) {
 
 // Drawing Functions - Pen
 function drawPenStart(x, y) {
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = state.color;
-    ctx.lineWidth = state.brushSize;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
+    const layer = getActiveLayer();
+    layer.ctx.lineCap = 'round';
+    layer.ctx.lineJoin = 'round';
+    layer.ctx.strokeStyle = state.color;
+    layer.ctx.lineWidth = state.brushSize;
+    layer.ctx.beginPath();
+    layer.ctx.moveTo(x, y);
 }
 
 function drawPen(x, y) {
-    ctx.lineTo(x, y);
-    ctx.stroke();
+    const layer = getActiveLayer();
+    layer.ctx.lineTo(x, y);
+    layer.ctx.stroke();
+    compositeAllLayers(); // Update display
     state.lastX = x;
     state.lastY = y;
 }
 
 // Drawing Functions - Eraser
 function drawEraserStart(x, y) {
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = state.brushSize;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
+    const layer = getActiveLayer();
+    layer.ctx.globalCompositeOperation = 'destination-out';
+    layer.ctx.lineCap = 'round';
+    layer.ctx.lineJoin = 'round';
+    layer.ctx.lineWidth = state.brushSize;
+    layer.ctx.beginPath();
+    layer.ctx.moveTo(x, y);
 }
 
 function drawEraser(x, y) {
-    ctx.lineTo(x, y);
-    ctx.stroke();
+    const layer = getActiveLayer();
+    layer.ctx.lineTo(x, y);
+    layer.ctx.stroke();
+    compositeAllLayers(); // Update display
     state.lastX = x;
     state.lastY = y;
 }
 
 // Shape Preview Functions
 function previewRect(x, y) {
-    ctx.putImageData(state.tempCanvas, 0, 0);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.strokeStyle = state.color;
-    ctx.lineWidth = state.brushSize;
-    ctx.strokeRect(state.startX, state.startY, x - state.startX, y - state.startY);
+    const layer = getActiveLayer();
+    // Restore active layer to clean state
+    layer.ctx.putImageData(state.tempCanvas, 0, 0);
+    layer.ctx.globalCompositeOperation = 'source-over';
+    layer.ctx.strokeStyle = state.color;
+    layer.ctx.lineWidth = state.brushSize;
+    layer.ctx.strokeRect(state.startX, state.startY, x - state.startX, y - state.startY);
+    compositeAllLayers(); // Update display
 }
 
 function previewEllipse(x, y) {
-    ctx.putImageData(state.tempCanvas, 0, 0);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.strokeStyle = state.color;
-    ctx.lineWidth = state.brushSize;
+    const layer = getActiveLayer();
+    // Restore active layer to clean state
+    layer.ctx.putImageData(state.tempCanvas, 0, 0);
+    layer.ctx.globalCompositeOperation = 'source-over';
+    layer.ctx.strokeStyle = state.color;
+    layer.ctx.lineWidth = state.brushSize;
 
     const radiusX = Math.abs(x - state.startX) / 2;
     const radiusY = Math.abs(y - state.startY) / 2;
     const centerX = state.startX + (x - state.startX) / 2;
     const centerY = state.startY + (y - state.startY) / 2;
 
-    ctx.beginPath();
-    ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
-    ctx.stroke();
+    layer.ctx.beginPath();
+    layer.ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
+    layer.ctx.stroke();
+    compositeAllLayers(); // Update display
 }
 
 function previewLine(x, y) {
-    ctx.putImageData(state.tempCanvas, 0, 0);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.strokeStyle = state.color;
-    ctx.lineWidth = state.brushSize;
-    ctx.lineCap = 'round';
+    const layer = getActiveLayer();
+    // Restore active layer to clean state
+    layer.ctx.putImageData(state.tempCanvas, 0, 0);
+    layer.ctx.globalCompositeOperation = 'source-over';
+    layer.ctx.strokeStyle = state.color;
+    layer.ctx.lineWidth = state.brushSize;
+    layer.ctx.lineCap = 'round';
 
-    ctx.beginPath();
-    ctx.moveTo(state.startX, state.startY);
-    ctx.lineTo(x, y);
-    ctx.stroke();
+    layer.ctx.beginPath();
+    layer.ctx.moveTo(state.startX, state.startY);
+    layer.ctx.lineTo(x, y);
+    layer.ctx.stroke();
+    compositeAllLayers(); // Update display
 }
 
 // Selection Tool
 function previewSelection(x, y) {
+    // For selection preview, draw directly on display canvas (not on layers)
     ctx.putImageData(state.tempCanvas, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
 
@@ -637,7 +753,7 @@ function drawLassoPath(x, y) {
         state.lassoPath.push({x, y});
     }
 
-    // Redraw canvas and path
+    // Redraw display canvas and path (lasso preview is on display, not layer)
     ctx.putImageData(state.tempCanvas, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
 
@@ -664,7 +780,7 @@ function finalizeLassoSelection() {
         return;
     }
 
-    // Close the path
+    // Close the path (restore display canvas)
     ctx.putImageData(state.tempCanvas, 0, 0);
 
     // Calculate bounding box
@@ -753,10 +869,11 @@ function copySelection() {
     if (!state.selection) return;
 
     const { x, y, width, height, lassoPath } = state.selection;
+    const layer = getActiveLayer();
 
     if (lassoPath) {
-        // Lasso selection: copy only pixels inside the polygon
-        const imageData = ctx.getImageData(x, y, width, height);
+        // Lasso selection: copy only pixels inside the polygon from active layer
+        const imageData = layer.ctx.getImageData(x, y, width, height);
         const data = imageData.data;
 
         // Create a mask for the lasso selection
@@ -773,8 +890,8 @@ function copySelection() {
 
         state.clipboard = imageData;
     } else {
-        // Rectangle selection: copy entire area
-        state.clipboard = ctx.getImageData(x, y, width, height);
+        // Rectangle selection: copy entire area from active layer
+        state.clipboard = layer.ctx.getImageData(x, y, width, height);
     }
 }
 
@@ -784,10 +901,11 @@ function cutSelection() {
     copySelection();
 
     const { x, y, width, height, lassoPath } = state.selection;
+    const layer = getActiveLayer();
 
     if (lassoPath) {
-        // Lasso selection: erase only pixels inside the polygon
-        const imageData = ctx.getImageData(x, y, width, height);
+        // Lasso selection: erase only pixels inside the polygon from active layer
+        const imageData = layer.ctx.getImageData(x, y, width, height);
         const data = imageData.data;
 
         for (let py = 0; py < height; py++) {
@@ -801,15 +919,16 @@ function cutSelection() {
             }
         }
 
-        ctx.putImageData(imageData, x, y);
+        layer.ctx.putImageData(imageData, x, y);
     } else {
-        // Rectangle selection: erase entire area
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.fillRect(x, y, width, height);
-        ctx.globalCompositeOperation = 'source-over';
+        // Rectangle selection: erase entire area from active layer
+        layer.ctx.globalCompositeOperation = 'destination-out';
+        layer.ctx.fillRect(x, y, width, height);
+        layer.ctx.globalCompositeOperation = 'source-over';
     }
 
     state.selection = null;
+    compositeAllLayers(); // Update display
     saveState();
 }
 
@@ -865,9 +984,15 @@ function redrawWithPaste() {
 function commitPaste() {
     if (!state.pasteMode) return;
 
+    // Paste onto active layer
+    const layer = getActiveLayer();
+    layer.ctx.putImageData(state.pasteImage, state.pasteX, state.pasteY);
+
     state.pasteMode = false;
     state.pasteImage = null;
     state.tempCanvas = null;
+
+    compositeAllLayers(); // Update display
     saveState();
 }
 
@@ -883,7 +1008,8 @@ function pickColor(x, y) {
 
 // Flood Fill (Bucket Tool) - Optimized scanline algorithm
 function floodFill(startX, startY) {
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const layer = getActiveLayer();
+    const imageData = layer.ctx.getImageData(0, 0, canvas.width, canvas.height);
     const pixels = imageData.data;
     const targetColor = getPixelColor(pixels, startX, startY);
     const fillColor = hexToRgb(state.color);
@@ -964,7 +1090,8 @@ function floodFill(startX, startY) {
         }
     }
 
-    ctx.putImageData(imageData, 0, 0);
+    layer.ctx.putImageData(imageData, 0, 0);
+    compositeAllLayers(); // Update display
 }
 
 function getPixelColor(pixels, x, y) {
@@ -1009,12 +1136,22 @@ function saveState() {
     // Remove any redo states
     state.history = state.history.slice(0, state.historyStep + 1);
 
-    // Save current state
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    state.history.push(imageData);
+    // Save snapshot of all layers
+    const snapshot = {
+        layers: state.layers.map(layer => ({
+            id: layer.id,
+            name: layer.name,
+            visible: layer.visible,
+            opacity: layer.opacity,
+            imageData: layer.ctx.getImageData(0, 0, canvas.width, canvas.height)
+        })),
+        activeLayerIndex: state.activeLayerIndex
+    };
+
+    state.history.push(snapshot);
     state.historyStep++;
 
-    // Limit history size
+    // Limit history size (reduced to 10 for multi-layer memory efficiency)
     if (state.history.length > CONSTANTS.MAX_HISTORY_SIZE) {
         state.history.shift();
         state.historyStep--;
@@ -1026,7 +1163,7 @@ function saveState() {
 function undo() {
     if (state.historyStep > 0) {
         state.historyStep--;
-        ctx.putImageData(state.history[state.historyStep], 0, 0);
+        restoreHistorySnapshot(state.history[state.historyStep]);
         state.selection = null; // Clear selection on undo
         updateUndoRedoButtons();
     }
@@ -1035,10 +1172,54 @@ function undo() {
 function redo() {
     if (state.historyStep < state.history.length - 1) {
         state.historyStep++;
-        ctx.putImageData(state.history[state.historyStep], 0, 0);
+        restoreHistorySnapshot(state.history[state.historyStep]);
         state.selection = null; // Clear selection on redo
         updateUndoRedoButtons();
     }
+}
+
+/**
+ * Restore all layers from a history snapshot
+ * @param {Object} snapshot - History snapshot object
+ */
+function restoreHistorySnapshot(snapshot) {
+    // Clear current layers
+    state.layers = [];
+
+    // Restore each layer from snapshot
+    for (const layerData of snapshot.layers) {
+        const layer = createLayerFromData(layerData);
+        state.layers.push(layer);
+    }
+
+    state.activeLayerIndex = snapshot.activeLayerIndex;
+
+    // Composite and display
+    compositeAllLayers();
+}
+
+/**
+ * Create a layer object from saved data
+ * @param {Object} data - Layer data from snapshot
+ * @returns {Object} Layer object
+ */
+function createLayerFromData(data) {
+    const layerCanvas = document.createElement('canvas');
+    layerCanvas.width = canvas.width;
+    layerCanvas.height = canvas.height;
+    const layerCtx = layerCanvas.getContext('2d', { willReadFrequently: true });
+
+    // Restore layer bitmap
+    layerCtx.putImageData(data.imageData, 0, 0);
+
+    return {
+        id: data.id,
+        name: data.name,
+        canvas: layerCanvas,
+        ctx: layerCtx,
+        visible: data.visible,
+        opacity: data.opacity
+    };
 }
 
 function updateUndoRedoButtons() {
@@ -1049,9 +1230,15 @@ function updateUndoRedoButtons() {
 // Clear Canvas
 function clearCanvas() {
     if (confirm('Clear canvas and start fresh?')) {
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Clear all layers and create a single white background layer
+        state.layers = [];
+        const backgroundLayer = createEmptyLayer('Background');
+        backgroundLayer.ctx.fillStyle = 'white';
+        backgroundLayer.ctx.fillRect(0, 0, canvas.width, canvas.height);
+        state.layers.push(backgroundLayer);
+        state.activeLayerIndex = 0;
         state.selection = null; // Clear selection
+        compositeAllLayers();
         saveState();
     }
 }
@@ -1092,58 +1279,391 @@ async function resizeCanvas() {
     }
 
     await withLoading(async () => {
+        const oldWidth = canvas.width;
+        const oldHeight = canvas.height;
 
-    // Save current canvas content
-    const oldWidth = canvas.width;
-    const oldHeight = canvas.height;
+        // Resize each layer
+        for (const layer of state.layers) {
+            if (resizeMode === 'scale') {
+                // Scale mode: save old content and scale to new size
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = oldWidth;
+                tempCanvas.height = oldHeight;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(layer.canvas, 0, 0);
 
-    if (resizeMode === 'scale') {
-        // Scale mode: resize content proportionally
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = oldWidth;
-        tempCanvas.height = oldHeight;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(canvas, 0, 0);
+                // Resize layer canvas
+                layer.canvas.width = newWidth;
+                layer.canvas.height = newHeight;
 
-        // Resize canvas
+                // Draw scaled content
+                layer.ctx.drawImage(tempCanvas, 0, 0, oldWidth, oldHeight, 0, 0, newWidth, newHeight);
+            } else {
+                // Crop mode: save old content at original size
+                const imageData = layer.ctx.getImageData(0, 0, oldWidth, oldHeight);
+
+                // Resize layer canvas
+                layer.canvas.width = newWidth;
+                layer.canvas.height = newHeight;
+
+                // Put original content (will be cropped if new size is smaller)
+                layer.ctx.putImageData(imageData, 0, 0);
+            }
+        }
+
+        // Resize display canvas
         canvas.width = newWidth;
         canvas.height = newHeight;
 
-        // Fill with white background
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, newWidth, newHeight);
+        // Resize composite canvas
+        state.compositeCanvas.width = newWidth;
+        state.compositeCanvas.height = newHeight;
 
-        // Draw scaled content
-        ctx.drawImage(tempCanvas, 0, 0, oldWidth, oldHeight, 0, 0, newWidth, newHeight);
-    } else {
-        // Crop mode: keep content at original size, crop or expand
-        const imageData = ctx.getImageData(0, 0, oldWidth, oldHeight);
+        // Update dimension inputs
+        document.getElementById('canvas-width').value = newWidth;
+        document.getElementById('canvas-height').value = newHeight;
 
-        // Resize canvas
-        canvas.width = newWidth;
-        canvas.height = newHeight;
-
-        // Fill with white background
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, newWidth, newHeight);
-
-        // Put original content (will be cropped if new size is smaller)
-        ctx.putImageData(imageData, 0, 0);
-    }
-
-    // Update dimension inputs
-    document.getElementById('canvas-width').value = newWidth;
-    document.getElementById('canvas-height').value = newHeight;
-
-    // Clear selection after resize
-    state.selection = null;
+        // Clear selection after resize
+        state.selection = null;
 
         // Reset zoom/pan after resize for clarity
         resetZoom();
 
+        // Composite all layers to display
+        compositeAllLayers();
+
         // Save state for undo
         saveState();
     }, 'Resizing canvas...');
+}
+
+// ===========================
+// Layer Management Functions
+// ===========================
+
+/**
+ * Add a new layer
+ */
+function addLayer() {
+    if (state.layers.length >= CONSTANTS.MAX_LAYERS) {
+        alert(`Maximum ${CONSTANTS.MAX_LAYERS} layers reached.`);
+        return;
+    }
+
+    const newLayer = createEmptyLayer(`Layer ${state.layers.length + 1}`);
+    state.layers.push(newLayer);
+    state.activeLayerIndex = state.layers.length - 1;
+
+    compositeAllLayers();
+    updateLayerUI();
+    saveState();
+}
+
+/**
+ * Delete layer at index
+ */
+function deleteLayer(index) {
+    if (state.layers.length <= 1) {
+        alert('Cannot delete the last layer.');
+        return;
+    }
+
+    if (!confirm(`Delete "${state.layers[index].name}"?`)) {
+        return;
+    }
+
+    state.layers.splice(index, 1);
+
+    // Adjust active index if needed
+    if (state.activeLayerIndex >= state.layers.length) {
+        state.activeLayerIndex = state.layers.length - 1;
+    } else if (state.activeLayerIndex > index) {
+        state.activeLayerIndex--;
+    }
+
+    compositeAllLayers();
+    updateLayerUI();
+    saveState();
+}
+
+/**
+ * Set the active layer
+ */
+function setActiveLayer(index) {
+    if (index < 0 || index >= state.layers.length) return;
+    state.activeLayerIndex = index;
+    updateLayerUI();
+}
+
+/**
+ * Move layer up in the stack (increase Z-index)
+ */
+function moveLayerUp(index) {
+    if (index >= state.layers.length - 1) return;
+
+    [state.layers[index], state.layers[index + 1]] =
+    [state.layers[index + 1], state.layers[index]];
+
+    // Update active index if needed
+    if (state.activeLayerIndex === index) {
+        state.activeLayerIndex = index + 1;
+    } else if (state.activeLayerIndex === index + 1) {
+        state.activeLayerIndex = index;
+    }
+
+    compositeAllLayers();
+    updateLayerUI();
+    saveState();
+}
+
+/**
+ * Move layer down in the stack (decrease Z-index)
+ */
+function moveLayerDown(index) {
+    if (index <= 0) return;
+
+    [state.layers[index], state.layers[index - 1]] =
+    [state.layers[index - 1], state.layers[index]];
+
+    // Update active index if needed
+    if (state.activeLayerIndex === index) {
+        state.activeLayerIndex = index - 1;
+    } else if (state.activeLayerIndex === index - 1) {
+        state.activeLayerIndex = index;
+    }
+
+    compositeAllLayers();
+    updateLayerUI();
+    saveState();
+}
+
+/**
+ * Merge layer down with the layer below it
+ */
+function mergeLayerDown(index) {
+    if (index <= 0) {
+        alert('Cannot merge the bottom layer.');
+        return;
+    }
+
+    const upperLayer = state.layers[index];
+    const lowerLayer = state.layers[index - 1];
+
+    // Create temporary canvas for merging
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+
+    // Draw lower layer
+    tempCtx.globalAlpha = lowerLayer.opacity;
+    tempCtx.drawImage(lowerLayer.canvas, 0, 0);
+
+    // Draw upper layer on top
+    tempCtx.globalAlpha = upperLayer.opacity;
+    tempCtx.drawImage(upperLayer.canvas, 0, 0);
+
+    // Replace lower layer with merged result
+    tempCtx.globalAlpha = 1.0;
+    lowerLayer.ctx.clearRect(0, 0, canvas.width, canvas.height);
+    lowerLayer.ctx.drawImage(tempCanvas, 0, 0);
+    lowerLayer.opacity = 1.0;
+    lowerLayer.name = `${lowerLayer.name} + ${upperLayer.name}`;
+
+    // Remove upper layer
+    state.layers.splice(index, 1);
+
+    // Adjust active index
+    if (state.activeLayerIndex >= index) {
+        state.activeLayerIndex--;
+    }
+
+    compositeAllLayers();
+    updateLayerUI();
+    saveState();
+}
+
+/**
+ * Flatten all layers into one
+ */
+function flattenAllLayers() {
+    if (!confirm('Flatten all layers into one? This cannot be undone.')) {
+        return;
+    }
+
+    // Create new single layer with composited result
+    const flatLayer = createEmptyLayer('Flattened');
+
+    // Composite all layers onto the flat layer
+    for (const layer of state.layers) {
+        if (!layer.visible) continue;
+        flatLayer.ctx.globalAlpha = layer.opacity;
+        flatLayer.ctx.drawImage(layer.canvas, 0, 0);
+    }
+
+    flatLayer.ctx.globalAlpha = 1.0;
+
+    // Replace all layers with single flat layer
+    state.layers = [flatLayer];
+    state.activeLayerIndex = 0;
+
+    compositeAllLayers();
+    updateLayerUI();
+    saveState();
+}
+
+/**
+ * Toggle layer visibility
+ */
+function toggleLayerVisibility(index) {
+    state.layers[index].visible = !state.layers[index].visible;
+    compositeAllLayers();
+    updateLayerUI();
+    // Note: Not saving state for visibility changes (UI state, not content)
+}
+
+/**
+ * Set layer opacity
+ */
+function setLayerOpacity(index, opacity) {
+    state.layers[index].opacity = opacity / 100; // Convert percentage to 0-1
+    compositeAllLayers();
+    updateLayerUI();
+    // Note: Save state on slider release, not during drag (see event handler)
+}
+
+/**
+ * Update the layer list UI
+ */
+function updateLayerUI() {
+    const layerList = document.getElementById('layer-list');
+    if (!layerList) return;
+
+    layerList.innerHTML = '';
+
+    // Render layers in reverse order (top layer first in UI)
+    for (let i = state.layers.length - 1; i >= 0; i--) {
+        const layer = state.layers[i];
+        const layerItem = createLayerItemElement(layer, i);
+        layerList.appendChild(layerItem);
+    }
+
+    // Update layer count
+    const layerCountLabel = document.getElementById('layer-count-label');
+    if (layerCountLabel) {
+        layerCountLabel.textContent = `Layers (${state.layers.length}/${CONSTANTS.MAX_LAYERS})`;
+    }
+
+    // Update button states
+    const deleteBtn = document.getElementById('btn-layer-delete');
+    const mergeBtn = document.getElementById('btn-layer-merge');
+    if (deleteBtn) deleteBtn.disabled = state.layers.length <= 1;
+    if (mergeBtn) mergeBtn.disabled = state.activeLayerIndex === 0;
+}
+
+/**
+ * Create a layer item DOM element
+ */
+function createLayerItemElement(layer, index) {
+    const div = document.createElement('div');
+    div.className = `layer-item ${index === state.activeLayerIndex ? 'active' : ''}`;
+    div.dataset.layerIndex = index;
+
+    // Thumbnail
+    const thumbDiv = document.createElement('div');
+    thumbDiv.className = 'layer-thumbnail';
+    const thumbCanvas = document.createElement('canvas');
+    thumbCanvas.width = 60;
+    thumbCanvas.height = 45;
+    const thumbCtx = thumbCanvas.getContext('2d');
+    // Draw scaled layer thumbnail
+    thumbCtx.drawImage(layer.canvas, 0, 0, layer.canvas.width, layer.canvas.height, 0, 0, 60, 45);
+    thumbDiv.appendChild(thumbCanvas);
+
+    // Info section
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'layer-info';
+
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'layer-name';
+    nameDiv.textContent = layer.name;
+
+    const controlsRow = document.createElement('div');
+    controlsRow.className = 'layer-controls-row';
+
+    const visibilityBtn = document.createElement('button');
+    visibilityBtn.className = `layer-visibility-btn ${layer.visible ? 'visible' : ''}`;
+    visibilityBtn.textContent = '👁';
+    visibilityBtn.title = 'Toggle Visibility';
+    visibilityBtn.onclick = (e) => {
+        e.stopPropagation();
+        toggleLayerVisibility(index);
+    };
+
+    const opacitySlider = document.createElement('input');
+    opacitySlider.type = 'range';
+    opacitySlider.className = 'layer-opacity-slider';
+    opacitySlider.min = '0';
+    opacitySlider.max = '100';
+    opacitySlider.value = Math.round(layer.opacity * 100);
+    opacitySlider.oninput = (e) => {
+        e.stopPropagation();
+        setLayerOpacity(index, e.target.value);
+        opacityValue.textContent = `${e.target.value}%`;
+    };
+    opacitySlider.onchange = () => {
+        saveState(); // Save state on slider release
+    };
+
+    const opacityValue = document.createElement('span');
+    opacityValue.className = 'layer-opacity-value';
+    opacityValue.textContent = `${Math.round(layer.opacity * 100)}%`;
+
+    controlsRow.appendChild(visibilityBtn);
+    controlsRow.appendChild(opacitySlider);
+    controlsRow.appendChild(opacityValue);
+
+    infoDiv.appendChild(nameDiv);
+    infoDiv.appendChild(controlsRow);
+
+    // Reorder buttons
+    const reorderDiv = document.createElement('div');
+    reorderDiv.className = 'layer-reorder';
+
+    const moveUpBtn = document.createElement('button');
+    moveUpBtn.className = 'layer-move-up';
+    moveUpBtn.textContent = '↑';
+    moveUpBtn.title = 'Move Up';
+    moveUpBtn.disabled = index === state.layers.length - 1;
+    moveUpBtn.onclick = (e) => {
+        e.stopPropagation();
+        moveLayerUp(index);
+    };
+
+    const moveDownBtn = document.createElement('button');
+    moveDownBtn.className = 'layer-move-down';
+    moveDownBtn.textContent = '↓';
+    moveDownBtn.title = 'Move Down';
+    moveDownBtn.disabled = index === 0;
+    moveDownBtn.onclick = (e) => {
+        e.stopPropagation();
+        moveLayerDown(index);
+    };
+
+    reorderDiv.appendChild(moveUpBtn);
+    reorderDiv.appendChild(moveDownBtn);
+
+    // Assemble
+    div.appendChild(thumbDiv);
+    div.appendChild(infoDiv);
+    div.appendChild(reorderDiv);
+
+    // Click to set active
+    div.onclick = () => {
+        setActiveLayer(index);
+    };
+
+    return div;
 }
 
 // Keyboard Shortcuts
@@ -1372,9 +1892,12 @@ function cancelText() {
     state.textMode = false;
 }
 
-// Reset composite operation on pointer up
+// Reset composite operation on pointer up (for eraser tool)
 canvas.addEventListener('pointerup', () => {
-    ctx.globalCompositeOperation = 'source-over';
+    const layer = getActiveLayer();
+    if (layer) {
+        layer.ctx.globalCompositeOperation = 'source-over';
+    }
 });
 
 // ===========================
