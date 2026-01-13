@@ -2,6 +2,28 @@
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
+// Application Constants
+const CONSTANTS = {
+    // History
+    MAX_HISTORY_SIZE: 50,
+
+    // Zoom & Pan
+    ZOOM_MIN: 0.1,              // 10%
+    ZOOM_MAX: 5.0,              // 500%
+    ZOOM_SPEED: 0.001,          // Mouse wheel zoom sensitivity
+    ZOOM_STEP: 1.2,             // Zoom in/out step multiplier (20%)
+
+    // Selection & Lasso
+    MARQUEE_DASH_SIZE: 5,       // Dash size for selection marquee
+    LASSO_POINT_MIN_DISTANCE: 3, // Minimum pixel distance between lasso points
+
+    // Paste
+    DEFAULT_PASTE_OFFSET: 50,   // Default paste position offset
+
+    // UI
+    FIT_CONTAINER_PADDING: 64   // Padding for fit-to-screen (32px each side)
+};
+
 const state = {
     tool: 'pen',
     color: '#000000',
@@ -29,7 +51,7 @@ const state = {
     lassoPath: [],
 
     // Zoom & Pan state
-    zoomLevel: 1.0,           // 0.1 to 5.0 (10% to 500%)
+    zoomLevel: 1.0,           // ZOOM_MIN to ZOOM_MAX
     panX: 0,                  // Pan offset in screen pixels
     panY: 0,                  // Pan offset in screen pixels
     isPanning: false,         // Space key + drag active
@@ -38,6 +60,43 @@ const state = {
     spaceKeyPressed: false,   // Track spacebar state
     originalCursor: 'crosshair'
 };
+
+// ===========================
+// Loading Indicator Utilities
+// ===========================
+
+/**
+ * Show loading overlay with optional custom message
+ */
+function showLoading(message = 'Processing...') {
+    const overlay = document.getElementById('loading-overlay');
+    const text = overlay.querySelector('.loading-text');
+    if (text) text.textContent = message;
+    overlay.classList.add('active');
+}
+
+/**
+ * Hide loading overlay
+ */
+function hideLoading() {
+    const overlay = document.getElementById('loading-overlay');
+    overlay.classList.remove('active');
+}
+
+/**
+ * Execute an async operation with loading indicator
+ */
+async function withLoading(operation, message = 'Processing...') {
+    showLoading(message);
+    try {
+        // Use setTimeout to allow UI to update before heavy operation
+        await new Promise(resolve => setTimeout(resolve, 10));
+        const result = await operation();
+        return result;
+    } finally {
+        hideLoading();
+    }
+}
 
 // ===========================
 // Zoom & Pan Utilities
@@ -83,7 +142,7 @@ function getZoomPercentage() {
  */
 function setZoom(newZoom, centerX = null, centerY = null) {
     // Clamp zoom level
-    newZoom = Math.max(0.1, Math.min(5.0, newZoom));
+    newZoom = Math.max(CONSTANTS.ZOOM_MIN, Math.min(CONSTANTS.ZOOM_MAX, newZoom));
 
     if (newZoom === state.zoomLevel) return;
 
@@ -111,12 +170,23 @@ function setZoom(newZoom, centerX = null, centerY = null) {
 }
 
 /**
- * Update zoom level display in status bar
+ * Update zoom level display in status bar and slider
  */
 function updateZoomDisplay() {
     const zoomDisplay = document.getElementById('status-zoom');
     if (zoomDisplay) {
         zoomDisplay.textContent = `Zoom: ${getZoomPercentage()}`;
+    }
+
+    // Update zoom slider
+    const zoomSlider = document.getElementById('zoom-slider');
+    const zoomValue = document.getElementById('zoom-value');
+    if (zoomSlider) {
+        const percent = Math.round(state.zoomLevel * 100);
+        zoomSlider.value = percent;
+        if (zoomValue) {
+            zoomValue.textContent = percent + '%';
+        }
     }
 }
 
@@ -297,8 +367,7 @@ function handleWheel(e) {
 
     // Determine zoom direction and amount
     const delta = -e.deltaY;
-    const zoomSpeed = 0.001;
-    const zoomChange = delta * zoomSpeed;
+    const zoomChange = delta * CONSTANTS.ZOOM_SPEED;
     const newZoom = state.zoomLevel * (1 + zoomChange);
 
     // Zoom toward cursor position
@@ -343,10 +412,13 @@ function handlePointerDown(e) {
     } else if (state.tool === 'eraser') {
         drawEraserStart(x, y);
     } else if (state.tool === 'fill') {
-        floodFill(Math.floor(x), Math.floor(y));
-        saveState();
-        // Redraw selection marquee after fill
-        if (state.selection) drawSelectionMarquee();
+        // Use loading indicator for flood fill
+        withLoading(async () => {
+            floodFill(Math.floor(x), Math.floor(y));
+            saveState();
+            // Redraw selection marquee after fill
+            if (state.selection) drawSelectionMarquee();
+        }, 'Filling area...');
     } else if (state.tool === 'picker') {
         pickColor(Math.floor(x), Math.floor(y));
     } else if (state.tool === 'select') {
@@ -548,7 +620,7 @@ function previewSelection(x, y) {
     const width = x - state.startX;
     const height = y - state.startY;
 
-    ctx.setLineDash([5, 5]);
+    ctx.setLineDash([CONSTANTS.MARQUEE_DASH_SIZE, CONSTANTS.MARQUEE_DASH_SIZE]);
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 1;
     ctx.strokeRect(state.startX, state.startY, width, height);
@@ -561,7 +633,7 @@ function drawLassoPath(x, y) {
     const lastPoint = state.lassoPath[state.lassoPath.length - 1];
     const distance = Math.sqrt((x - lastPoint.x) ** 2 + (y - lastPoint.y) ** 2);
 
-    if (distance > 3) {
+    if (distance > CONSTANTS.LASSO_POINT_MIN_DISTANCE) {
         state.lassoPath.push({x, y});
     }
 
@@ -576,7 +648,7 @@ function drawLassoPath(x, y) {
         for (let i = 1; i < state.lassoPath.length; i++) {
             ctx.lineTo(state.lassoPath[i].x, state.lassoPath[i].y);
         }
-        ctx.setLineDash([5, 5]);
+        ctx.setLineDash([CONSTANTS.MARQUEE_DASH_SIZE, CONSTANTS.MARQUEE_DASH_SIZE]);
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 1;
         ctx.stroke();
@@ -636,7 +708,7 @@ function drawSelectionMarquee() {
 
     // Adjust line width and dash pattern based on zoom for consistent visual thickness
     const visualLineWidth = Math.max(1, 1 / state.zoomLevel);
-    const dashSize = 5 / state.zoomLevel;
+    const dashSize = CONSTANTS.MARQUEE_DASH_SIZE / state.zoomLevel;
 
     if (state.selection.lassoPathAbsolute) {
         // Draw lasso marquee
@@ -746,8 +818,27 @@ function pasteFromClipboard() {
 
     state.pasteMode = true;
     state.pasteImage = state.clipboard;
-    state.pasteX = 50;
-    state.pasteY = 50;
+
+    // Calculate viewport center in canvas coordinates
+    const container = document.querySelector('.canvas-container');
+    const containerRect = container.getBoundingClientRect();
+
+    // Get center of viewport in screen coordinates
+    const centerScreenX = containerRect.left + containerRect.width / 2;
+    const centerScreenY = containerRect.top + containerRect.height / 2;
+
+    // Convert to canvas coordinates
+    const centerCanvas = screenToCanvas(centerScreenX, centerScreenY);
+
+    // Offset by half the paste image size to center the pasted content
+    state.pasteX = Math.max(0, Math.min(
+        centerCanvas.x - state.pasteImage.width / 2,
+        canvas.width - state.pasteImage.width
+    ));
+    state.pasteY = Math.max(0, Math.min(
+        centerCanvas.y - state.pasteImage.height / 2,
+        canvas.height - state.pasteImage.height
+    ));
 
     // Save current canvas for redrawing
     state.tempCanvas = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -763,7 +854,7 @@ function redrawWithPaste() {
 
     // Draw outline - adjust dash and width for zoom
     const visualLineWidth = Math.max(1, 1 / state.zoomLevel);
-    const dashSize = 5 / state.zoomLevel;
+    const dashSize = CONSTANTS.MARQUEE_DASH_SIZE / state.zoomLevel;
     ctx.setLineDash([dashSize, dashSize]);
     ctx.strokeStyle = '#000';
     ctx.lineWidth = visualLineWidth;
@@ -790,7 +881,7 @@ function pickColor(x, y) {
     updateColorDisplay();
 }
 
-// Flood Fill (Bucket Tool)
+// Flood Fill (Bucket Tool) - Optimized scanline algorithm
 function floodFill(startX, startY) {
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const pixels = imageData.data;
@@ -800,26 +891,77 @@ function floodFill(startX, startY) {
 
     if (colorsMatch(targetColor, fillColor, tolerance)) return;
 
+    const width = canvas.width;
+    const height = canvas.height;
     const stack = [[startX, startY]];
-    const visited = new Set();
+
+    // Use typed array for faster visited tracking
+    const visited = new Uint8Array(width * height);
 
     while (stack.length > 0) {
         const [x, y] = stack.pop();
-        const key = `${x},${y}`;
 
-        if (visited.has(key)) continue;
-        if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) continue;
+        // Early bounds check
+        if (x < 0 || x >= width || y < 0 || y >= height) continue;
+
+        const index = y * width + x;
+        if (visited[index]) continue;
 
         const currentColor = getPixelColor(pixels, x, y);
         if (!colorsMatch(currentColor, targetColor, tolerance)) continue;
 
-        visited.add(key);
-        setPixelColor(pixels, x, y, fillColor);
+        // Scanline fill: fill horizontally in both directions
+        let left = x;
+        let right = x;
 
-        stack.push([x + 1, y]);
-        stack.push([x - 1, y]);
-        stack.push([x, y + 1]);
-        stack.push([x, y - 1]);
+        // Scan left
+        while (left > 0) {
+            const leftIndex = y * width + (left - 1);
+            if (visited[leftIndex]) break;
+            const leftColor = getPixelColor(pixels, left - 1, y);
+            if (!colorsMatch(leftColor, targetColor, tolerance)) break;
+            left--;
+        }
+
+        // Scan right
+        while (right < width - 1) {
+            const rightIndex = y * width + (right + 1);
+            if (visited[rightIndex]) break;
+            const rightColor = getPixelColor(pixels, right + 1, y);
+            if (!colorsMatch(rightColor, targetColor, tolerance)) break;
+            right++;
+        }
+
+        // Fill the horizontal line and mark as visited
+        for (let i = left; i <= right; i++) {
+            const scanIndex = y * width + i;
+            visited[scanIndex] = 1;
+            setPixelColor(pixels, i, y, fillColor);
+        }
+
+        // Add adjacent lines to stack (with bounds checking)
+        for (let i = left; i <= right; i++) {
+            // Check line above
+            if (y > 0) {
+                const aboveIndex = (y - 1) * width + i;
+                if (!visited[aboveIndex]) {
+                    const aboveColor = getPixelColor(pixels, i, y - 1);
+                    if (colorsMatch(aboveColor, targetColor, tolerance)) {
+                        stack.push([i, y - 1]);
+                    }
+                }
+            }
+            // Check line below
+            if (y < height - 1) {
+                const belowIndex = (y + 1) * width + i;
+                if (!visited[belowIndex]) {
+                    const belowColor = getPixelColor(pixels, i, y + 1);
+                    if (colorsMatch(belowColor, targetColor, tolerance)) {
+                        stack.push([i, y + 1]);
+                    }
+                }
+            }
+        }
     }
 
     ctx.putImageData(imageData, 0, 0);
@@ -873,7 +1015,7 @@ function saveState() {
     state.historyStep++;
 
     // Limit history size
-    if (state.history.length > 50) {
+    if (state.history.length > CONSTANTS.MAX_HISTORY_SIZE) {
         state.history.shift();
         state.historyStep--;
     }
@@ -906,7 +1048,7 @@ function updateUndoRedoButtons() {
 
 // Clear Canvas
 function clearCanvas() {
-    if (confirm('Clear canvas? This cannot be undone.')) {
+    if (confirm('Clear canvas and start fresh?')) {
         ctx.fillStyle = 'white';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         state.selection = null; // Clear selection
@@ -915,19 +1057,24 @@ function clearCanvas() {
 }
 
 // Save Image
-function saveImage() {
-    canvas.toBlob((blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `paint-${Date.now()}.png`;
-        a.click();
-        URL.revokeObjectURL(url);
-    });
+async function saveImage() {
+    await withLoading(async () => {
+        return new Promise((resolve) => {
+            canvas.toBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `paint-${Date.now()}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+                resolve();
+            });
+        });
+    }, 'Saving image...');
 }
 
 // Resize Canvas
-function resizeCanvas() {
+async function resizeCanvas() {
     const newWidth = parseInt(document.getElementById('canvas-width').value);
     const newHeight = parseInt(document.getElementById('canvas-height').value);
     const resizeMode = document.querySelector('input[name="resize-mode"]:checked').value;
@@ -943,6 +1090,8 @@ function resizeCanvas() {
     if (!confirm(`Resize canvas to ${newWidth}x${newHeight} (${resizeMode} mode)?`)) {
         return;
     }
+
+    await withLoading(async () => {
 
     // Save current canvas content
     const oldWidth = canvas.width;
@@ -989,11 +1138,12 @@ function resizeCanvas() {
     // Clear selection after resize
     state.selection = null;
 
-    // Reset zoom/pan after resize for clarity
-    resetZoom();
+        // Reset zoom/pan after resize for clarity
+        resetZoom();
 
-    // Save state for undo
-    saveState();
+        // Save state for undo
+        saveState();
+    }, 'Resizing canvas...');
 }
 
 // Keyboard Shortcuts
@@ -1092,12 +1242,12 @@ function handleKeyboard(e) {
 // ===========================
 
 function zoomIn() {
-    const newZoom = state.zoomLevel * 1.2;
+    const newZoom = state.zoomLevel * CONSTANTS.ZOOM_STEP;
     setZoom(newZoom);
 }
 
 function zoomOut() {
-    const newZoom = state.zoomLevel / 1.2;
+    const newZoom = state.zoomLevel / CONSTANTS.ZOOM_STEP;
     setZoom(newZoom);
 }
 
@@ -1113,9 +1263,9 @@ function fitToScreen() {
     const container = document.querySelector('.canvas-container');
     const containerRect = container.getBoundingClientRect();
 
-    // Account for padding (32px on each side = 64px total)
-    const availableWidth = containerRect.width - 64;
-    const availableHeight = containerRect.height - 64;
+    // Account for padding (32px on each side)
+    const availableWidth = containerRect.width - CONSTANTS.FIT_CONTAINER_PADDING;
+    const availableHeight = containerRect.height - CONSTANTS.FIT_CONTAINER_PADDING;
 
     // Calculate zoom to fit
     const zoomX = availableWidth / canvas.width;
