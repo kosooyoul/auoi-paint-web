@@ -368,9 +368,13 @@ function setupEventListeners() {
     document.getElementById('btn-undo').addEventListener('click', undo);
     document.getElementById('btn-redo').addEventListener('click', redo);
     document.getElementById('btn-clear').addEventListener('click', clearCanvas);
+    document.getElementById('btn-open').addEventListener('click', openImageFile);
     document.getElementById('btn-save').addEventListener('click', saveImage);
     document.getElementById('btn-help').addEventListener('click', toggleHelpModal);
     document.getElementById('btn-resize').addEventListener('click', resizeCanvas);
+
+    // File input
+    document.getElementById('file-input').addEventListener('change', handleFileSelect);
 
     // Layer buttons
     document.getElementById('btn-layer-add').addEventListener('click', addLayer);
@@ -1266,6 +1270,106 @@ async function saveImage() {
     }, 'Saving image...');
 }
 
+// Open Image File
+async function openImageFile() {
+    const fileInput = document.getElementById('file-input');
+    fileInput.click();
+}
+
+function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.match('image.*')) {
+        alert('Please select a valid image file (PNG, JPG, or WebP).');
+        return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = async (event) => {
+        await withLoading(async () => {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+
+                img.onload = () => {
+                    const activeLayer = getActiveLayer();
+                    if (!activeLayer) {
+                        alert('No active layer found.');
+                        reject();
+                        return;
+                    }
+
+                    // Check if image is larger than canvas
+                    const imgWidth = img.width;
+                    const imgHeight = img.height;
+                    const canvasWidth = canvas.width;
+                    const canvasHeight = canvas.height;
+
+                    let drawWidth = imgWidth;
+                    let drawHeight = imgHeight;
+                    let drawX = 0;
+                    let drawY = 0;
+
+                    // If image is larger than canvas, ask user what to do
+                    if (imgWidth > canvasWidth || imgHeight > canvasHeight) {
+                        const scaleToFit = confirm(
+                            `Image (${imgWidth}×${imgHeight}) is larger than canvas (${canvasWidth}×${canvasHeight}).\n\n` +
+                            `Click OK to scale to fit, or Cancel to place at original size (will be cropped).`
+                        );
+
+                        if (scaleToFit) {
+                            // Calculate scale to fit while maintaining aspect ratio
+                            const scaleX = canvasWidth / imgWidth;
+                            const scaleY = canvasHeight / imgHeight;
+                            const scale = Math.min(scaleX, scaleY);
+
+                            drawWidth = imgWidth * scale;
+                            drawHeight = imgHeight * scale;
+
+                            // Center the image
+                            drawX = (canvasWidth - drawWidth) / 2;
+                            drawY = (canvasHeight - drawHeight) / 2;
+                        }
+                        // else: keep original size, will be cropped by canvas bounds
+                    } else {
+                        // Center smaller images
+                        drawX = (canvasWidth - imgWidth) / 2;
+                        drawY = (canvasHeight - imgHeight) / 2;
+                    }
+
+                    // Draw image to active layer
+                    activeLayer.ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+
+                    // Update composite and UI
+                    compositeAllLayers();
+                    updateActiveLayerThumbnail();
+                    saveState();
+
+                    // Clear the file input so the same file can be opened again
+                    e.target.value = '';
+
+                    resolve();
+                };
+
+                img.onerror = () => {
+                    alert('Failed to load image. Please try a different file.');
+                    reject();
+                };
+
+                img.src = event.target.result;
+            });
+        }, 'Loading image...');
+    };
+
+    reader.onerror = () => {
+        alert('Failed to read file. Please try again.');
+    };
+
+    reader.readAsDataURL(file);
+}
+
 // Resize Canvas
 async function resizeCanvas() {
     const newWidth = parseInt(document.getElementById('canvas-width').value);
@@ -1889,6 +1993,9 @@ function handleKeyboard(e) {
         } else if (e.key === 'v') {
             e.preventDefault();
             pasteFromClipboard();
+        } else if (e.key === 'o') {
+            e.preventDefault();
+            openImageFile();
         }
     }
 

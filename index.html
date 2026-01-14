@@ -102,9 +102,11 @@
                     <button id="btn-undo" class="action-btn" title="Undo (Ctrl+Z)">↶</button>
                     <button id="btn-redo" class="action-btn" title="Redo (Ctrl+Y)">↷</button>
                     <button id="btn-clear" class="action-btn" title="New">🗎</button>
+                    <button id="btn-open" class="action-btn" title="Open Image (Ctrl+O)">📂</button>
                     <button id="btn-save" class="action-btn" title="Save">💾</button>
                     <button id="btn-help" class="action-btn" title="Help (? or H)">❓</button>
                 </div>
+                <input type="file" id="file-input" accept="image/png,image/jpeg,image/jpg,image/webp" style="display: none;">
             </div>
 
             <!-- Canvas Resize -->
@@ -201,6 +203,7 @@
                         <tr><td><kbd>Ctrl</kbd> + <kbd>C</kbd></td><td>Copy Selection</td></tr>
                         <tr><td><kbd>Ctrl</kbd> + <kbd>X</kbd></td><td>Cut Selection</td></tr>
                         <tr><td><kbd>Ctrl</kbd> + <kbd>V</kbd></td><td>Paste</td></tr>
+                        <tr><td><kbd>Ctrl</kbd> + <kbd>O</kbd></td><td>Open Image File</td></tr>
                         <tr><td><kbd>Esc</kbd></td><td>Cancel Paste / Cancel Text</td></tr>
                     </table>
                 </div>
