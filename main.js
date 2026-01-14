@@ -59,6 +59,7 @@ const state = {
     layerIdCounter: 0,        // For generating unique layer IDs
     compositeCanvas: null,    // Off-screen canvas for compositing layers
     compositeCtx: null,       // Context for composite canvas
+    draggedLayerIndex: null,  // Index of layer being dragged (for reordering)
 
     // Zoom & Pan state
     zoomLevel: 1.0,           // ZOOM_MIN to ZOOM_MAX
@@ -655,6 +656,7 @@ function drawPen(x, y) {
     layer.ctx.lineTo(x, y);
     layer.ctx.stroke();
     compositeAllLayers(); // Update display
+    updateActiveLayerThumbnailThrottled(); // Real-time thumbnail update
     state.lastX = x;
     state.lastY = y;
 }
@@ -675,6 +677,7 @@ function drawEraser(x, y) {
     layer.ctx.lineTo(x, y);
     layer.ctx.stroke();
     compositeAllLayers(); // Update display
+    updateActiveLayerThumbnailThrottled(); // Real-time thumbnail update
     state.lastX = x;
     state.lastY = y;
 }
@@ -689,6 +692,7 @@ function previewRect(x, y) {
     layer.ctx.lineWidth = state.brushSize;
     layer.ctx.strokeRect(state.startX, state.startY, x - state.startX, y - state.startY);
     compositeAllLayers(); // Update display
+    updateActiveLayerThumbnailThrottled(); // Real-time thumbnail update
 }
 
 function previewEllipse(x, y) {
@@ -708,6 +712,7 @@ function previewEllipse(x, y) {
     layer.ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI);
     layer.ctx.stroke();
     compositeAllLayers(); // Update display
+    updateActiveLayerThumbnailThrottled(); // Real-time thumbnail update
 }
 
 function previewLine(x, y) {
@@ -724,6 +729,7 @@ function previewLine(x, y) {
     layer.ctx.lineTo(x, y);
     layer.ctx.stroke();
     compositeAllLayers(); // Update display
+    updateActiveLayerThumbnailThrottled(); // Real-time thumbnail update
 }
 
 // Selection Tool
@@ -1513,6 +1519,30 @@ function flattenAllLayers() {
 }
 
 /**
+ * Reorder layer by drag and drop
+ */
+function reorderLayerByDrag(fromIndex, toIndex) {
+    // Remove the dragged layer
+    const [draggedLayer] = state.layers.splice(fromIndex, 1);
+
+    // Insert at new position
+    state.layers.splice(toIndex, 0, draggedLayer);
+
+    // Update active layer index
+    if (state.activeLayerIndex === fromIndex) {
+        state.activeLayerIndex = toIndex;
+    } else if (fromIndex < state.activeLayerIndex && toIndex >= state.activeLayerIndex) {
+        state.activeLayerIndex--;
+    } else if (fromIndex > state.activeLayerIndex && toIndex <= state.activeLayerIndex) {
+        state.activeLayerIndex++;
+    }
+
+    compositeAllLayers();
+    updateLayerUI();
+    saveState();
+}
+
+/**
  * Toggle layer visibility
  */
 function toggleLayerVisibility(index) {
@@ -1530,6 +1560,101 @@ function setLayerOpacity(index, opacity) {
     compositeAllLayers();
     updateLayerUI();
     // Note: Save state on slider release, not during drag (see event handler)
+}
+
+/**
+ * Rename a layer
+ */
+function renameLayer(index, newName) {
+    if (!newName || newName.trim() === '') {
+        return; // Don't allow empty names
+    }
+    state.layers[index].name = newName.trim();
+    updateLayerUI();
+    // Note: Name change is UI state, not saved to history
+}
+
+/**
+ * Start editing a layer name
+ */
+function startLayerRename(nameDiv, index, currentName) {
+    // Create input element
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'layer-name-input';
+    input.value = currentName;
+    input.maxLength = 30;
+
+    // Replace nameDiv with input
+    const parent = nameDiv.parentElement;
+    parent.replaceChild(input, nameDiv);
+    input.focus();
+    input.select();
+
+    // Commit on Enter
+    const commitRename = () => {
+        const newName = input.value.trim();
+        if (newName && newName !== currentName) {
+            renameLayer(index, newName);
+        } else {
+            updateLayerUI(); // Restore original UI
+        }
+    };
+
+    // Cancel on Escape
+    const cancelRename = () => {
+        updateLayerUI(); // Restore original UI
+    };
+
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            commitRename();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelRename();
+        }
+    };
+
+    // Commit on blur
+    input.onblur = commitRename;
+}
+
+/**
+ * Update only the active layer's thumbnail (for real-time updates)
+ */
+function updateActiveLayerThumbnail() {
+    const activeLayer = getActiveLayer();
+    if (!activeLayer) return;
+
+    // Find the active layer item in the DOM
+    const layerItems = document.querySelectorAll('.layer-item');
+    const activeLayerItem = Array.from(layerItems).find(item =>
+        parseInt(item.dataset.layerIndex) === state.activeLayerIndex
+    );
+
+    if (!activeLayerItem) return;
+
+    // Find the thumbnail canvas
+    const thumbCanvas = activeLayerItem.querySelector('.layer-thumbnail canvas');
+    if (!thumbCanvas) return;
+
+    // Update thumbnail
+    const thumbCtx = thumbCanvas.getContext('2d');
+    thumbCtx.clearRect(0, 0, 60, 45);
+    thumbCtx.drawImage(activeLayer.canvas, 0, 0, activeLayer.canvas.width, activeLayer.canvas.height, 0, 0, 60, 45);
+}
+
+// Throttled version using requestAnimationFrame
+let thumbnailUpdateScheduled = false;
+function updateActiveLayerThumbnailThrottled() {
+    if (!thumbnailUpdateScheduled) {
+        thumbnailUpdateScheduled = true;
+        requestAnimationFrame(() => {
+            updateActiveLayerThumbnail();
+            thumbnailUpdateScheduled = false;
+        });
+    }
 }
 
 /**
@@ -1568,6 +1693,7 @@ function createLayerItemElement(layer, index) {
     const div = document.createElement('div');
     div.className = `layer-item ${index === state.activeLayerIndex ? 'active' : ''}`;
     div.dataset.layerIndex = index;
+    div.draggable = true;
 
     // Thumbnail
     const thumbDiv = document.createElement('div');
@@ -1587,6 +1713,13 @@ function createLayerItemElement(layer, index) {
     const nameDiv = document.createElement('div');
     nameDiv.className = 'layer-name';
     nameDiv.textContent = layer.name;
+    nameDiv.title = 'Double-click to rename';
+
+    // Double-click to rename
+    nameDiv.ondblclick = (e) => {
+        e.stopPropagation();
+        startLayerRename(nameDiv, index, layer.name);
+    };
 
     const controlsRow = document.createElement('div');
     controlsRow.className = 'layer-controls-row';
@@ -1657,6 +1790,44 @@ function createLayerItemElement(layer, index) {
     div.appendChild(thumbDiv);
     div.appendChild(infoDiv);
     div.appendChild(reorderDiv);
+
+    // Drag and drop for reordering
+    div.ondragstart = (e) => {
+        state.draggedLayerIndex = index;
+        div.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    div.ondragover = (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        if (state.draggedLayerIndex !== null && state.draggedLayerIndex !== index) {
+            div.classList.add('drag-over');
+        }
+    };
+
+    div.ondragleave = (e) => {
+        div.classList.remove('drag-over');
+    };
+
+    div.ondrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        div.classList.remove('drag-over');
+
+        if (state.draggedLayerIndex !== null && state.draggedLayerIndex !== index) {
+            reorderLayerByDrag(state.draggedLayerIndex, index);
+        }
+    };
+
+    div.ondragend = (e) => {
+        div.classList.remove('dragging');
+        document.querySelectorAll('.layer-item').forEach(item => {
+            item.classList.remove('drag-over');
+        });
+        state.draggedLayerIndex = null;
+    };
 
     // Click to set active
     div.onclick = () => {
