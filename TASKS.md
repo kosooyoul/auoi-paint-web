@@ -2,14 +2,15 @@
 
 ## Current State
 - ✅ Core painting tools (pen, eraser, shapes, fill, picker, selection, lasso, text)
-- ✅ Undo/Redo (50 steps)
+- ✅ Undo/Redo (10 steps - reduced for multi-layer memory efficiency)
 - ✅ Fill tolerance slider (0-60)
 - ✅ Copy/Cut/Paste with positioning
-- ✅ Save as PNG
+- ✅ Save as PNG (flattened composite)
 - ✅ Keyboard shortcuts help modal
 - ✅ Canvas resize functionality (Scale/Crop modes)
 - ✅ Zoom & Pan (10%-500%, Ctrl+Wheel, Space+drag)
 - ✅ Canvas-centric UX with floating, draggable toolbox
+- ✅ Multi-layer system (up to 20 layers with visibility, opacity, reordering, merge, flatten)
 
 ## Suggested Next Tasks (Priority Order)
 
@@ -71,18 +72,27 @@
 - Hybrid CSS transform + coordinate mapping architecture
 - GPU-accelerated, smooth performance
 
-### 6. [FUTURE] Layer Support
-**Why:** Professional feature
+### 6. [COMPLETED] ~~Layer Support~~
+**Status:** ✅ Completed (2026-01-13)
 **Effort:** Very High (16+ hours)
 **Value:** High for advanced users
 **Scope:**
-- Multiple canvas layers
-- Layer visibility, opacity, order
-- Layer panel UI
-- Major architecture refactor
+- Multiple canvas layers (up to 20 layers)
+- Layer visibility toggle
+- Layer opacity control (0-100%)
+- Layer reordering (move up/down buttons)
+- Merge down & flatten all operations
+- Layer panel UI with thumbnails
+- Major architecture refactor (off-screen layer canvases + compositing)
+- History system adapted for multi-layer snapshots
+- All drawing tools work on active layer
 
 ## Known Issues / Tech Debt
-- None currently blocking
+- History size reduced to 10 snapshots (from 50) due to multi-layer memory usage
+- Layer thumbnails update on commit only (not real-time)
+- Visibility/opacity changes don't create history entries (by design)
+- No layer naming UI (uses default "Layer N" names)
+- No drag-drop layer reordering (uses up/down buttons)
 
 ## Notes
 - All tasks assume Vanilla JS only, no frameworks
