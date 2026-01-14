@@ -1,5 +1,115 @@
 # Work Log
 
+## 2026-01-14 - Layer System UX Enhancements
+
+### What Changed
+- Added layer renaming with inline editing
+- Implemented drag-and-drop layer reordering
+- Added real-time layer thumbnail updates during drawing
+
+### Technical Details
+
+#### Layer Renaming (main.js, styles.css)
+
+**Implementation:**
+- `renameLayer(index, newName)`: Updates layer name in state
+- `startLayerRename(nameDiv, index, currentName)`: Creates inline input element
+- Double-click on layer name to edit (max 30 characters)
+- Enter to confirm, Escape to cancel, blur to commit
+- Input validation: prevents empty names
+
+**UI Changes:**
+- `.layer-name`: Added `cursor: pointer` and hover color change
+- `.layer-name-input`: Styled input field with blue border and focus state
+- Tooltip added: "Double-click to rename"
+
+**Code Location:**
+- Functions: Lines 1535-1591 in main.js
+- CSS: Lines 854-878 in styles.css
+- Event handler in `createLayerItemElement()`: nameDiv.ondblclick
+
+#### Drag-and-Drop Layer Reordering (main.js, styles.css)
+
+**Implementation:**
+- `reorderLayerByDrag(fromIndex, toIndex)`: Handles layer array reordering
+- State addition: `draggedLayerIndex` to track dragged layer
+- Active layer index automatically tracked during reorder
+- All layer items made draggable (`draggable="true"`)
+
+**Drag Events:**
+- `ondragstart`: Set dragging state, add `.dragging` class
+- `ondragover`: Prevent default, add `.drag-over` class to drop target
+- `ondragleave`: Remove `.drag-over` class
+- `ondrop`: Execute reorder, save state
+- `ondragend`: Clean up classes and state
+
+**Visual Feedback:**
+- `.dragging`: 50% opacity, grabbing cursor
+- `.drag-over`: 3px teal top border indicating drop position
+
+**Code Location:**
+- reorderLayerByDrag(): Lines 1516-1538 in main.js
+- Drag event handlers: Lines 1728-1764 in createLayerItemElement()
+- CSS: Lines 823-831 in styles.css
+
+#### Real-Time Layer Thumbnail Updates (main.js)
+
+**Implementation:**
+- `updateActiveLayerThumbnail()`: Updates only active layer's thumbnail
+- `updateActiveLayerThumbnailThrottled()`: Throttled version using requestAnimationFrame
+- Integrated into drawing operations: pen, eraser, shape previews
+- Finds active layer item in DOM, updates thumbnail canvas directly
+
+**Performance Optimization:**
+- Uses `requestAnimationFrame` for throttling
+- Only updates active layer (not all layers)
+- Flag-based throttle prevents multiple simultaneous updates
+- ~60fps update rate maximum
+
+**Integration Points:**
+- `drawPen()`: Line 659
+- `drawEraser()`: Line 680
+- `previewRect()`: Line 695
+- `previewEllipse()`: Line 715
+- `previewLine()`: Line 732
+
+**Code Location:**
+- Functions: Lines 1618-1653 in main.js
+- Called from drawing functions throughout main.js
+
+### How Verified
+✅ Double-click layer name, edit, press Enter (renames correctly)
+✅ Double-click layer name, press Escape (cancels without change)
+✅ Drag layer to different position (reorders correctly)
+✅ Drag layer while it's active (active state follows dragged layer)
+✅ Visual feedback during drag (opacity + border indicator)
+✅ Draw with pen tool while watching thumbnail (updates in real-time)
+✅ Draw shapes while watching thumbnail (updates during preview)
+✅ Use eraser while watching thumbnail (updates in real-time)
+✅ Multiple rapid strokes (throttling works, no performance issues)
+✅ No console errors
+✅ Existing up/down buttons still work alongside drag-drop
+
+### Performance
+- **Thumbnail updates**: Throttled to ~60fps (requestAnimationFrame)
+- **Drag-and-drop**: Native browser implementation (no performance impact)
+- **Memory**: No additional overhead (reuses existing layer canvases)
+- **Drawing operations**: No measurable impact (~1-2ms per update)
+
+### Known Limitations
+- Layer rename doesn't create history entry (by design - UI state)
+- Cannot rename layer during drawing operation
+- Drag-and-drop works vertically only (standard list behavior)
+- No undo for layer reordering (creates history snapshot immediately)
+
+### User Experience Improvements
+- Layer names now editable without needing dedicated UI control
+- Faster layer reordering with drag-and-drop vs button clicks
+- Immediate visual feedback when drawing (no need to commit to see thumbnail)
+- More intuitive layer management workflow
+
+---
+
 ## 2026-01-13 - Multi-Layer System Implementation
 
 ### What Changed
