@@ -1,5 +1,90 @@
 # Work Log
 
+## 2026-01-14 - File Open Functionality
+
+### What Changed
+- Added file open functionality to load images (PNG, JPG, WebP)
+- Images load directly into the active layer
+- Smart image placement with automatic scaling and centering
+
+### Technical Details
+
+#### UI Changes (index.html)
+- Added Open button (📂) in Actions section
+- Hidden file input element accepting image/png, image/jpeg, image/jpg, image/webp
+- Updated Help modal with Ctrl+O shortcut in Edit section
+
+#### File Loading Implementation (main.js)
+
+**Functions:**
+- `openImageFile()`: Lines 1274-1277
+  - Triggers hidden file input click
+- `handleFileSelect(e)`: Lines 1279-1371
+  - Validates file type (image/* only)
+  - Reads file using FileReader API
+  - Loads image with async/await pattern
+  - Smart placement logic based on image size
+
+**Smart Image Placement:**
+- **Large images (> canvas size)**: User prompt to scale-to-fit or crop
+  - Scale mode: Maintains aspect ratio, centers on canvas
+  - Crop mode: Original size, clipped by canvas bounds
+- **Small images (< canvas size)**: Automatically centered
+- Calculation uses Math.min(scaleX, scaleY) for aspect ratio preservation
+
+**Integration:**
+- Draws to active layer using `activeLayer.ctx.drawImage()`
+- Calls `compositeAllLayers()` to update display
+- Calls `updateActiveLayerThumbnail()` for real-time thumbnail update
+- Saves state with `saveState()` for undo/redo support
+- Clears file input after load (allows reopening same file)
+
+**Event Listeners:**
+- Button click: Line 371
+- File input change: Line 377
+- Keyboard shortcut (Ctrl+O): Lines 1996-1998
+
+**Loading Feedback:**
+- Uses `withLoading()` wrapper for "Loading image..." overlay
+- Error handling for file read failures and invalid image formats
+
+### How Verified
+✅ Open button (📂) triggers file dialog
+✅ Ctrl+O keyboard shortcut works
+✅ PNG files load correctly
+✅ JPG files load correctly
+✅ WebP files load correctly
+✅ Large image shows scale/crop dialog
+✅ Small image centers automatically
+✅ Image loads to active layer (not background)
+✅ Layer thumbnail updates after load
+✅ Undo (Ctrl+Z) works after loading image
+✅ Same file can be opened multiple times
+✅ Invalid file types show error message
+✅ No console errors
+
+### Performance
+- FileReader API reads file asynchronously (non-blocking)
+- Image loading uses native browser Image() constructor
+- Loading overlay prevents UI interaction during load
+- No memory leaks (file input cleared after use)
+
+### Known Limitations
+- No drag-and-drop file support (only file dialog)
+- No support for loading image as new layer (loads to active layer only)
+- No support for animated formats (GIF, APNG)
+- Large images (>10MB) may take longer to load
+- No progress bar for large file uploads
+
+### Future Enhancements
+- Drag-and-drop file support
+- Option to load as new layer
+- Resize canvas to fit image option
+- Support for more formats (BMP, TIFF)
+- Progress indicator for large files
+
+---
+
 ## 2026-01-14 - Layer System UX Enhancements
 
 ### What Changed
