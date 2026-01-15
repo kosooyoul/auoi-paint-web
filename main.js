@@ -233,7 +233,8 @@ function createEmptyLayer(name) {
         canvas: layerCanvas,
         ctx: layerCtx,
         visible: true,
-        opacity: 1.0
+        opacity: 1.0,
+        blendMode: 'normal'
     };
 }
 
@@ -263,17 +264,23 @@ function compositeAllLayers() {
     // Clear composite canvas
     state.compositeCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw each visible layer with opacity (bottom to top)
+    // Draw each visible layer with opacity and blend mode (bottom to top)
     for (let i = 0; i < state.layers.length; i++) {
         const layer = state.layers[i];
         if (!layer.visible) continue;
 
+        // Set blend mode
+        const blendMode = layer.blendMode || 'normal';
+        state.compositeCtx.globalCompositeOperation = blendMode === 'normal' ? 'source-over' : blendMode;
+
+        // Set opacity
         state.compositeCtx.globalAlpha = layer.opacity;
         state.compositeCtx.drawImage(layer.canvas, 0, 0);
     }
 
-    // Reset alpha
+    // Reset to defaults
     state.compositeCtx.globalAlpha = 1.0;
+    state.compositeCtx.globalCompositeOperation = 'source-over';
 
     // Copy composite to display canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1718,6 +1725,16 @@ function setLayerOpacity(index, opacity) {
 }
 
 /**
+ * Set layer blend mode
+ */
+function setLayerBlendMode(index, blendMode) {
+    state.layers[index].blendMode = blendMode;
+    compositeAllLayers();
+    updateLayerUI();
+    saveState();
+}
+
+/**
  * Rename a layer
  */
 function renameLayer(index, newName) {
@@ -1911,8 +1928,54 @@ function createLayerItemElement(layer, index) {
     controlsRow.appendChild(opacitySlider);
     controlsRow.appendChild(opacityValue);
 
+    // Blend mode row
+    const blendModeRow = document.createElement('div');
+    blendModeRow.className = 'layer-blend-mode-row';
+
+    const blendModeLabel = document.createElement('label');
+    blendModeLabel.textContent = 'Blend:';
+    blendModeLabel.className = 'layer-blend-mode-label';
+
+    const blendModeSelect = document.createElement('select');
+    blendModeSelect.className = 'layer-blend-mode-select';
+
+    // Add blend mode options
+    const blendModes = [
+        { value: 'normal', label: 'Normal' },
+        { value: 'multiply', label: 'Multiply' },
+        { value: 'screen', label: 'Screen' },
+        { value: 'overlay', label: 'Overlay' },
+        { value: 'darken', label: 'Darken' },
+        { value: 'lighten', label: 'Lighten' },
+        { value: 'color-dodge', label: 'Color Dodge' },
+        { value: 'color-burn', label: 'Color Burn' },
+        { value: 'hard-light', label: 'Hard Light' },
+        { value: 'soft-light', label: 'Soft Light' },
+        { value: 'difference', label: 'Difference' },
+        { value: 'exclusion', label: 'Exclusion' }
+    ];
+
+    blendModes.forEach(mode => {
+        const option = document.createElement('option');
+        option.value = mode.value;
+        option.textContent = mode.label;
+        if (mode.value === (layer.blendMode || 'normal')) {
+            option.selected = true;
+        }
+        blendModeSelect.appendChild(option);
+    });
+
+    blendModeSelect.onchange = (e) => {
+        e.stopPropagation();
+        setLayerBlendMode(index, e.target.value);
+    };
+
+    blendModeRow.appendChild(blendModeLabel);
+    blendModeRow.appendChild(blendModeSelect);
+
     infoDiv.appendChild(nameDiv);
     infoDiv.appendChild(controlsRow);
+    infoDiv.appendChild(blendModeRow);
 
     // Reorder buttons
     const reorderDiv = document.createElement('div');

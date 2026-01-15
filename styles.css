@@ -993,6 +993,42 @@ kbd:hover {
     text-align: center;
 }
 
+.layer-blend-mode-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.layer-blend-mode-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--neutral-600);
+    min-width: 40px;
+}
+
+.layer-blend-mode-select {
+    flex: 1;
+    padding: 2px 4px;
+    font-size: 11px;
+    background: var(--neutral-100);
+    border: 1px solid var(--neutral-300);
+    border-radius: 3px;
+    color: var(--neutral-700);
+    cursor: pointer;
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.layer-blend-mode-select:hover {
+    border-color: var(--primary-teal);
+}
+
+.layer-blend-mode-select:focus {
+    border-color: var(--primary-teal);
+    box-shadow: 0 0 0 2px rgba(26, 188, 156, 0.2);
+}
+
 .layer-reorder {
     display: flex;
     flex-direction: column;
