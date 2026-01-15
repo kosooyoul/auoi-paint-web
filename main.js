@@ -376,6 +376,13 @@ function setupEventListeners() {
     // File input
     document.getElementById('file-input').addEventListener('change', handleFileSelect);
 
+    // Drag and drop for file upload
+    const canvasContainer = document.querySelector('.canvas-container');
+    canvasContainer.addEventListener('dragenter', handleDragEnter);
+    canvasContainer.addEventListener('dragover', handleDragOver);
+    canvasContainer.addEventListener('dragleave', handleDragLeave);
+    canvasContainer.addEventListener('drop', handleDrop);
+
     // Layer buttons
     document.getElementById('btn-layer-add').addEventListener('click', addLayer);
     document.getElementById('btn-layer-delete').addEventListener('click', () => {
@@ -1276,10 +1283,8 @@ async function openImageFile() {
     fileInput.click();
 }
 
-function handleFileSelect(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
+// Load image from File object (used by both file input and drag-and-drop)
+async function loadImageFromFile(file, clearInput = null) {
     // Validate file type
     if (!file.type.match('image.*')) {
         alert('Please select a valid image file (PNG, JPG, or WebP).');
@@ -1347,8 +1352,10 @@ function handleFileSelect(e) {
                     updateActiveLayerThumbnail();
                     saveState();
 
-                    // Clear the file input so the same file can be opened again
-                    e.target.value = '';
+                    // Clear the file input if provided
+                    if (clearInput) {
+                        clearInput.value = '';
+                    }
 
                     resolve();
                 };
@@ -1368,6 +1375,50 @@ function handleFileSelect(e) {
     };
 
     reader.readAsDataURL(file);
+}
+
+function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    loadImageFromFile(file, e.target);
+}
+
+// Drag and Drop handlers
+function handleDragEnter(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const container = document.querySelector('.canvas-container');
+    container.classList.add('drag-over');
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+function handleDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only remove highlight if leaving the container itself, not child elements
+    if (e.target.classList.contains('canvas-container')) {
+        const container = document.querySelector('.canvas-container');
+        container.classList.remove('drag-over');
+    }
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const container = document.querySelector('.canvas-container');
+    container.classList.remove('drag-over');
+
+    const files = e.dataTransfer.files;
+    if (files.length === 0) return;
+
+    // Only process the first file
+    const file = files[0];
+    loadImageFromFile(file);
 }
 
 // Resize Canvas
