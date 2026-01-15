@@ -1,5 +1,100 @@
 # Work Log
 
+## 2026-01-15 - Layer Blend Modes
+
+### What Changed
+- Added 12 blend modes for layer compositing
+- Each layer can now have a blend mode to control how it blends with layers below
+- Blend mode dropdown added to layer UI panel
+
+### Technical Details
+
+#### Blend Modes Supported
+- **Normal** (default): Standard alpha blending
+- **Multiply**: Darkens by multiplying colors
+- **Screen**: Lightens by inverting, multiplying, and inverting again
+- **Overlay**: Combines Multiply and Screen based on base color
+- **Darken**: Selects darker of blend and base colors
+- **Lighten**: Selects lighter of blend and base colors
+- **Color Dodge**: Brightens base color
+- **Color Burn**: Darkens base color
+- **Hard Light**: Similar to Overlay but stronger
+- **Soft Light**: Similar to Overlay but softer
+- **Difference**: Subtracts darker from lighter color
+- **Exclusion**: Similar to Difference but lower contrast
+
+#### Implementation (main.js)
+
+**Data Structure Changes:**
+- `createEmptyLayer()`: Line 237
+  - Added `blendMode: 'normal'` property to layer objects
+
+**Compositing Logic:**
+- `compositeAllLayers()`: Lines 263-288
+  - Maps layer.blendMode to Canvas 2D `globalCompositeOperation`
+  - Applies blend mode before drawing each layer
+  - Resets to 'source-over' after compositing complete
+
+**New Function:**
+- `setLayerBlendMode(index, blendMode)`: Lines 1727-1735
+  - Updates layer blend mode
+  - Triggers recomposite with `compositeAllLayers()`
+  - Updates UI with `updateLayerUI()`
+  - Saves state with `saveState()` for undo/redo
+
+**UI Changes:**
+- `createLayerItemElement()`: Lines 1931-1978
+  - Added blend mode row with label and dropdown
+  - 12 options populated dynamically
+  - onchange handler calls `setLayerBlendMode()`
+  - Positioned below opacity slider
+
+#### Styling (styles.css)
+
+**New Classes:**
+- `.layer-blend-mode-row`: Lines 996-1001
+  - Flexbox layout with 6px gap, 4px top margin
+- `.layer-blend-mode-label`: Lines 1003-1008
+  - Label styling: 11px font, 40px min-width
+- `.layer-blend-mode-select`: Lines 1010-1030
+  - Dropdown styling with hover/focus states
+  - Teal accent color on focus with subtle shadow
+
+### How Verified
+✅ All 12 blend modes work correctly
+✅ Blend mode dropdown appears in each layer item
+✅ Changing blend mode updates canvas immediately
+✅ Normal mode works as expected (default behavior)
+✅ Multiply darkens colors correctly
+✅ Screen lightens colors correctly
+✅ Overlay combines light/dark appropriately
+✅ Other modes (Darken, Lighten, etc.) produce expected results
+✅ Blend mode changes save to history (undo/redo supported)
+✅ Blend mode works with layer opacity
+✅ Multiple layers with different blend modes composite correctly
+✅ UI styling consistent with existing layer controls
+✅ No console errors
+
+### Performance
+- Blend mode application uses native Canvas 2D API (`globalCompositeOperation`)
+- GPU-accelerated on most browsers
+- No performance impact for compositing (negligible overhead)
+- Blend mode changes are instant (no noticeable lag)
+
+### Known Limitations
+- Blend modes use Canvas 2D composite operations (limited to available modes)
+- Some advanced blend modes from Photoshop (e.g., Vivid Light, Linear Burn) not available
+- Blend mode preview not shown during drawing (only after commit)
+- Layer reordering does not preserve blend mode selection state in UI (value is correct, just dropdown may not update visually until refresh)
+
+### Future Enhancements
+- Add visual preview of blend modes (thumbnail or swatch)
+- Group blend modes by category (Darken, Lighten, Contrast, etc.)
+- Add keyboard shortcuts for common blend modes
+- Consider custom blend mode algorithms for unsupported Photoshop modes
+
+---
+
 ## 2026-01-14 - File Open Functionality
 
 ### What Changed
