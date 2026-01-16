@@ -1,5 +1,192 @@
 # Work Log
 
+## 2026-01-16 - Code Modularization & Refactoring
+
+### What Changed
+- Refactored monolithic main.js into modular JavaScript files organized in js/ directory
+- Fixed namespace reference errors after modularization
+- Improved code organization and maintainability
+
+### Technical Details
+
+#### File Structure (Before → After)
+**Before:**
+```
+/
+├── index.html
+├── styles.css
+└── main.js (2800+ lines, monolithic)
+```
+
+**After:**
+```
+/
+├── index.html
+├── styles.css
+└── js/
+    ├── app-constants.js   # Constants and canvas initialization
+    ├── app-state.js        # Application state and init function
+    ├── drawing-tools.js    # Pen, eraser, shapes, fill, picker
+    ├── file-io.js          # File operations, loading indicators
+    ├── history.js          # Undo/redo system
+    ├── layer-core.js       # Layer system core functions
+    ├── layer-ui.js         # Layer panel UI and management
+    ├── selection-tools.js  # Selection, clipboard, lasso
+    ├── ui-handlers.js      # Event handlers and UI interactions
+    └── zoom-pan.js         # Zoom and pan functionality
+```
+
+#### Module Organization
+
+**App.Constants (app-constants.js):**
+- Canvas and context references
+- Application-wide constants (ZOOM_MIN, MAX_HISTORY_SIZE, etc.)
+- Exported to `window.App.Constants` namespace
+
+**App.State (app-state.js):**
+- Application state object (tool, color, layers, zoom, etc.)
+- `init()` function to bootstrap application
+- Exported to `window.App.State` namespace
+
+**App.DrawingTools (drawing-tools.js):**
+- Drawing functions: pen, eraser, shapes (rect, ellipse, line)
+- Fill tool (flood fill with scanline algorithm)
+- Color picker (eyedropper)
+- Preview functions for shapes
+- Exported to `window.App.DrawingTools` namespace
+
+**App.FileIO (file-io.js):**
+- File operations: clearCanvas, saveImage, openImageFile
+- Loading indicator utilities: showLoading, hideLoading, withLoading
+- Drag-and-drop handlers for file upload
+- Canvas resize functionality
+- Exported to `window.App.FileIO` namespace
+
+**App.History (history.js):**
+- Undo/redo system with multi-layer snapshots
+- saveState, undo, redo functions
+- History snapshot restoration
+- Exported to `window.App.History` namespace
+
+**App.Layers (layer-core.js):**
+- Layer system core: create, composite, get active layer
+- initializeLayerSystem, compositeAllLayers
+- Layer creation utilities
+- Exported to `window.App.Layers` namespace
+
+**App.LayerUI (layer-ui.js):**
+- Layer panel UI management
+- Layer operations: add, delete, merge, flatten, reorder
+- Layer property setters: visibility, opacity, blend mode
+- Layer rename functionality with inline editing
+- Thumbnail updates (real-time and on-demand)
+- Exported to `window.App.LayerUI` namespace
+
+**App.SelectionTools (selection-tools.js):**
+- Selection tools: rectangular and lasso
+- Clipboard operations: copy, cut, paste
+- Selection marquee rendering
+- Point-in-polygon detection for lasso
+- Exported to `window.App.SelectionTools` namespace
+
+**App.UI (ui-handlers.js):**
+- Event listener setup for all UI elements
+- Canvas event handlers: pointerdown, pointermove, pointerup
+- Keyboard shortcuts handling
+- Zoom controls (UI functions)
+- Text tool UI (show input, commit, cancel)
+- Help modal functions
+- Floating toolbox drag-and-drop
+- Exported to `window.App.UI` namespace
+
+**App.ZoomPan (zoom-pan.js):**
+- Zoom and pan coordinate transformation
+- screenToCanvas, applyCanvasTransform, setZoom
+- Zoom display updates
+- Cursor management for zoom/pan
+- Exported to `window.App.ZoomPan` namespace
+
+#### HTML Changes (index.html)
+- Updated script tags to load all modules in correct order
+- Removed inline `<script>` tag with main.js
+- Added 10 script tags for modular files
+- Load order: constants → core (state, layers, history) → tools → UI
+
+#### Bug Fix: Namespace Reference Errors
+**Issue:** After refactoring, event listeners in `ui-handlers.js` were calling functions directly (e.g., `undo`, `clearCanvas`, `addLayer`) instead of through their proper namespaces.
+
+**Root Cause:** Functions moved to different modules (`App.History`, `App.FileIO`, `App.LayerUI`) but event listeners not updated.
+
+**Fixed References (ui-handlers.js:67-93):**
+- `undo`, `redo` → `App.History.undo`, `App.History.redo`
+- `clearCanvas`, `openImageFile`, `saveImage`, `resizeCanvas` → `App.FileIO.*`
+- `handleFileSelect`, `handleDragEnter`, `handleDragOver`, `handleDragLeave`, `handleDrop` → `App.FileIO.*`
+- `addLayer`, `deleteLayer`, `mergeLayerDown`, `flattenAllLayers` → `App.LayerUI.*`
+
+**Error Message (Before Fix):**
+```
+ui-handlers.js:67 Uncaught ReferenceError: undo is not defined
+    at Object.setupEventListeners (ui-handlers.js:67:67)
+    at Object.init (app-state.js:70:16)
+```
+
+**Resolution:** All event listeners now correctly reference functions through `App.*` namespaces.
+
+### How Verified
+✅ Application loads without errors
+✅ All drawing tools work (pen, eraser, shapes, fill, picker)
+✅ Layer system fully functional (add, delete, merge, flatten, reorder)
+✅ Undo/redo works correctly
+✅ File operations work (open, save, clear, resize)
+✅ Selection and clipboard operations work (copy, cut, paste)
+✅ Text tool works
+✅ Zoom and pan functionality intact
+✅ Help modal opens/closes correctly
+✅ Floating toolbox drag-and-drop works
+✅ All keyboard shortcuts functional
+✅ No console errors in browser
+
+### Benefits of Modularization
+
+**Maintainability:**
+- Easier to locate and modify specific features
+- Clear separation of concerns
+- Each module has a single responsibility
+
+**Readability:**
+- Files are 200-400 lines each (vs. 2800+ lines monolithic)
+- Related functions grouped together
+- Module-level comments at the top of each file
+
+**Scalability:**
+- Easy to add new features to appropriate modules
+- Minimal risk of unintended side effects
+- Clear namespace boundaries prevent naming conflicts
+
+**Collaboration:**
+- Multiple developers can work on different modules simultaneously
+- Git merge conflicts less likely with smaller files
+- Easier code review process
+
+**Performance:**
+- No performance impact (all modules loaded synchronously on page load)
+- Browser caching more granular (only changed modules re-downloaded)
+
+### Known Limitations
+- No build system or bundler (all modules loaded via separate script tags)
+- No ES6 module syntax (using IIFE + global namespace pattern)
+- Load order matters (constants must load before dependent modules)
+- No automatic dependency management
+
+### Future Enhancements
+- Consider migration to ES6 modules (`import`/`export`)
+- Add bundler (Webpack/Rollup/Vite) for production builds
+- Implement lazy loading for non-critical modules
+- Add JSDoc comments for better IDE autocomplete
+- Consider TypeScript for type safety
+
+---
+
 ## 2026-01-15 - Layer Blend Modes
 
 ### What Changed
