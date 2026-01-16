@@ -237,6 +237,30 @@
         </div>
     </div>
 
-    <script src="main.js"></script>
+    <!-- Core modules (no dependencies) -->
+    <script src="js/app-constants.js"></script>
+    <script src="js/app-state.js"></script>
+
+    <!-- Utilities (depend on core) -->
+    <script src="js/zoom-pan.js"></script>
+
+    <!-- Layer system (depends on core) -->
+    <script src="js/layer-core.js"></script>
+
+    <!-- History (depends on layer-core) -->
+    <script src="js/history.js"></script>
+
+    <!-- Tools (depend on layer-core, state) -->
+    <script src="js/drawing-tools.js"></script>
+    <script src="js/selection-tools.js"></script>
+
+    <!-- File I/O (depends on layer-core, history) -->
+    <script src="js/file-io.js"></script>
+
+    <!-- Layer UI (depends on layer-core, history) -->
+    <script src="js/layer-ui.js"></script>
+
+    <!-- UI handlers - orchestrates everything (must be last) -->
+    <script src="js/ui-handlers.js"></script>
 </body>
 </html>
