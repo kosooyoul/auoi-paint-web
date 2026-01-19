@@ -20,6 +20,9 @@
     <!-- Floating Header -->
     <div id="floating-header" class="floating-header">
         <h1>Web Paint</h1>
+        <button id="theme-toggle" class="theme-toggle-btn" title="Toggle Dark Mode (Ctrl+Shift+D)">
+            <span class="theme-icon">☀️</span>
+        </button>
     </div>
 
     <!-- Floating Toolbox (Draggable) -->
@@ -34,10 +37,10 @@
             <div class="tool-section">
                 <div class="section-label">Drawing</div>
                 <div class="tool-buttons">
-                    <button id="tool-pen" class="tool-btn active" title="Pen (P)">🖊️</button>
-                    <button id="tool-eraser" class="tool-btn" title="Eraser (E)">🧹</button>
-                    <button id="tool-fill" class="tool-btn" title="Fill (F)">🪣</button>
-                    <button id="tool-picker" class="tool-btn" title="Color Picker (I)">💧</button>
+                    <button id="tool-pen" class="tool-btn active" title="Pen (P)">✏️</button>
+                    <button id="tool-eraser" class="tool-btn" title="Eraser (E)">⬜</button>
+                    <button id="tool-fill" class="tool-btn" title="Fill (F)">▨</button>
+                    <button id="tool-picker" class="tool-btn" title="Color Picker (I)">🎨</button>
                 </div>
             </div>
 
@@ -45,9 +48,9 @@
             <div class="tool-section">
                 <div class="section-label">Shapes</div>
                 <div class="tool-buttons">
-                    <button id="shape-rect" class="tool-btn" title="Rectangle (R)">▭</button>
+                    <button id="shape-rect" class="tool-btn" title="Rectangle (R)">▢</button>
                     <button id="shape-ellipse" class="tool-btn" title="Ellipse (C)">○</button>
-                    <button id="shape-line" class="tool-btn" title="Line (L)">╱</button>
+                    <button id="shape-line" class="tool-btn" title="Line (L)">⎯</button>
                 </div>
             </div>
 
@@ -56,18 +59,45 @@
                 <div class="section-label">Selection</div>
                 <div class="tool-buttons">
                     <button id="tool-select" class="tool-btn" title="Select (S)">⬚</button>
-                    <button id="tool-lasso" class="tool-btn" title="Lasso (A)">⚬</button>
-                    <button id="tool-text" class="tool-btn" title="Text (T)">T</button>
+                    <button id="tool-lasso" class="tool-btn" title="Lasso (A)">◯</button>
+                    <button id="tool-text" class="tool-btn" title="Text (T)">𝐓</button>
                 </div>
             </div>
 
             <!-- Color & Size -->
             <div class="tool-section">
                 <div class="section-label">Color & Size</div>
+
+                <!-- Primary & Secondary Colors -->
+                <div class="color-swatches-row">
+                    <div class="color-swatch-container">
+                        <div class="color-swatch-label">Primary</div>
+                        <div id="color-display-primary" class="color-swatch large" title="Left click to pick (Primary)"></div>
+                    </div>
+                    <div class="color-swap-btn" id="swap-colors" title="Swap colors (X)">⇄</div>
+                    <div class="color-swatch-container">
+                        <div class="color-swatch-label">Secondary</div>
+                        <div id="color-display-secondary" class="color-swatch large" title="Right click to pick (Secondary)"></div>
+                    </div>
+                </div>
+
                 <div class="control-row">
                     <input type="color" id="color-picker" value="#000000">
-                    <div id="color-display" class="color-swatch"></div>
+                    <div id="color-display" class="color-swatch" style="display: none;"></div>
                 </div>
+
+                <!-- Color History -->
+                <div class="color-history-container">
+                    <div class="color-history-label">Recent</div>
+                    <div id="color-history" class="color-history"></div>
+                </div>
+
+                <!-- Preset Palette -->
+                <div class="color-palette-container">
+                    <div class="color-palette-label">Palette</div>
+                    <div id="color-palette" class="color-palette"></div>
+                </div>
+
                 <div class="control-row">
                     <label>Size</label>
                     <input type="range" id="brush-size" min="1" max="50" value="4">
@@ -101,10 +131,10 @@
                 <div class="action-buttons">
                     <button id="btn-undo" class="action-btn" title="Undo (Ctrl+Z)">↶</button>
                     <button id="btn-redo" class="action-btn" title="Redo (Ctrl+Y)">↷</button>
-                    <button id="btn-clear" class="action-btn" title="New">🗎</button>
-                    <button id="btn-open" class="action-btn" title="Open Image (Ctrl+O)">📂</button>
-                    <button id="btn-save" class="action-btn" title="Save">💾</button>
-                    <button id="btn-help" class="action-btn" title="Help (? or H)">❓</button>
+                    <button id="btn-clear" class="action-btn" title="New">⊕</button>
+                    <button id="btn-open" class="action-btn" title="Open Image (Ctrl+O)">⊞</button>
+                    <button id="btn-save" class="action-btn" title="Save">⊡</button>
+                    <button id="btn-help" class="action-btn" title="Help (? or H)">?</button>
                 </div>
                 <input type="file" id="file-input" accept="image/png,image/jpeg,image/jpg,image/webp" style="display: none;">
             </div>

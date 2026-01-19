@@ -39,8 +39,30 @@ function setupEventListeners() {
     // Color picker
     document.getElementById('color-picker').addEventListener('input', (e) => {
         state.color = e.target.value;
+        addToColorHistory(state.color);
         updateColorDisplay();
     });
+
+    // Primary/Secondary color swatches
+    document.getElementById('color-display-primary').addEventListener('click', () => {
+        document.getElementById('color-picker').click();
+    });
+
+    document.getElementById('color-display-secondary').addEventListener('click', () => {
+        // Swap to secondary and open picker
+        const temp = state.color;
+        state.color = state.secondaryColor;
+        state.secondaryColor = temp;
+        updateColorDisplay();
+        document.getElementById('color-picker').click();
+    });
+
+    // Swap colors button
+    document.getElementById('swap-colors').addEventListener('click', swapColors);
+
+    // Initialize color palette and history
+    initializeColorPalette();
+    loadColorHistory();
 
     // Brush size
     document.getElementById('brush-size').addEventListener('input', (e) => {
@@ -71,6 +93,9 @@ function setupEventListeners() {
     document.getElementById('btn-save').addEventListener('click', App.FileIO.saveImage);
     document.getElementById('btn-help').addEventListener('click', toggleHelpModal);
     document.getElementById('btn-resize').addEventListener('click', App.FileIO.resizeCanvas);
+
+    // Theme toggle
+    document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 
     // File input
     document.getElementById('file-input').addEventListener('change', App.FileIO.handleFileSelect);
@@ -162,6 +187,135 @@ function setTool(tool) {
 // Update Color Display
 function updateColorDisplay() {
     document.getElementById('color-display').style.backgroundColor = state.color;
+    document.getElementById('color-display-primary').style.backgroundColor = state.color;
+    document.getElementById('color-display-secondary').style.backgroundColor = state.secondaryColor;
+    document.getElementById('color-picker').value = state.color;
+}
+
+// Swap Primary and Secondary Colors
+function swapColors() {
+    const temp = state.color;
+    state.color = state.secondaryColor;
+    state.secondaryColor = temp;
+    updateColorDisplay();
+}
+
+// Add color to history
+function addToColorHistory(color) {
+    // Remove if already exists
+    const index = state.colorHistory.indexOf(color);
+    if (index > -1) {
+        state.colorHistory.splice(index, 1);
+    }
+
+    // Add to beginning
+    state.colorHistory.unshift(color);
+
+    // Keep only last 16 colors
+    if (state.colorHistory.length > 16) {
+        state.colorHistory = state.colorHistory.slice(0, 16);
+    }
+
+    // Save to localStorage
+    saveColorHistory();
+
+    // Update UI
+    renderColorHistory();
+}
+
+// Save color history to localStorage
+function saveColorHistory() {
+    try {
+        localStorage.setItem('webpaint_colorHistory', JSON.stringify(state.colorHistory));
+    } catch (e) {
+        console.warn('Could not save color history to localStorage:', e);
+    }
+}
+
+// Load color history from localStorage
+function loadColorHistory() {
+    try {
+        const saved = localStorage.getItem('webpaint_colorHistory');
+        if (saved) {
+            state.colorHistory = JSON.parse(saved);
+            renderColorHistory();
+        }
+    } catch (e) {
+        console.warn('Could not load color history from localStorage:', e);
+    }
+}
+
+// Render color history chips
+function renderColorHistory() {
+    const container = document.getElementById('color-history');
+    container.innerHTML = '';
+
+    // Always show 16 slots
+    for (let i = 0; i < 16; i++) {
+        const chip = document.createElement('div');
+        chip.className = 'color-chip';
+
+        if (i < state.colorHistory.length) {
+            const color = state.colorHistory[i];
+            chip.style.backgroundColor = color;
+            chip.title = color;
+            chip.addEventListener('click', () => {
+                state.color = color;
+                addToColorHistory(color);
+                updateColorDisplay();
+            });
+            chip.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                state.secondaryColor = color;
+                updateColorDisplay();
+            });
+        } else {
+            chip.classList.add('empty');
+        }
+
+        container.appendChild(chip);
+    }
+}
+
+// Initialize preset color palette
+function initializeColorPalette() {
+    const container = document.getElementById('color-palette');
+
+    // Material Design inspired color palette
+    const colors = [
+        '#000000', '#ffffff', '#e53935', '#d81b60',
+        '#8e24aa', '#5e35b1', '#3949ab', '#1e88e5',
+        '#039be5', '#00acc1', '#00897b', '#43a047',
+        '#7cb342', '#c0ca33', '#fdd835', '#ffb300',
+        '#fb8c00', '#f4511e', '#6d4c41', '#757575',
+        '#546e7a', '#ff5252', '#ff4081', '#e040fb',
+        '#7c4dff', '#536dfe', '#448aff', '#40c4ff',
+        '#18ffff', '#64ffda', '#69f0ae', '#b2ff59',
+        '#eeff41', '#ffff00', '#ffd740', '#ffab40'
+    ];
+
+    container.innerHTML = '';
+
+    colors.forEach(color => {
+        const chip = document.createElement('div');
+        chip.className = 'color-chip';
+        chip.style.backgroundColor = color;
+        chip.title = color;
+
+        chip.addEventListener('click', () => {
+            state.color = color;
+            addToColorHistory(color);
+            updateColorDisplay();
+        });
+
+        chip.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            state.secondaryColor = color;
+            updateColorDisplay();
+        });
+
+        container.appendChild(chip);
+    });
 }
 
 // Canvas Event Handlers
@@ -373,6 +527,13 @@ function handleKeyboard(e) {
     }
 
     if (e.ctrlKey || e.metaKey) {
+        // Theme toggle shortcut (Ctrl+Shift+D)
+        if (e.shiftKey && e.key.toLowerCase() === 'd') {
+            e.preventDefault();
+            toggleTheme();
+            return;
+        }
+
         // Zoom shortcuts
         if (e.key === '0') {
             e.preventDefault();
@@ -424,6 +585,13 @@ function handleKeyboard(e) {
     if ((e.key === '?' || e.key.toLowerCase() === 'h') && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         toggleHelpModal();
+        return;
+    }
+
+    // Swap colors shortcut (X key without modifiers)
+    if (e.key.toLowerCase() === 'x' && !e.ctrlKey && !e.metaKey && !state.textMode) {
+        e.preventDefault();
+        swapColors();
         return;
     }
 
@@ -695,11 +863,52 @@ function restoreToolboxPosition() {
     }
 }
 
+// ===========================
+// Theme Toggle
+// ===========================
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+}
+
+function setTheme(theme) {
+    if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        document.querySelector('.theme-icon').textContent = '🌙';
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        document.querySelector('.theme-icon').textContent = '☀️';
+    }
+
+    // Save to localStorage
+    try {
+        localStorage.setItem('webpaint_theme', theme);
+    } catch (e) {
+        console.warn('Could not save theme to localStorage:', e);
+    }
+}
+
+function loadTheme() {
+    try {
+        const savedTheme = localStorage.getItem('webpaint_theme');
+        if (savedTheme) {
+            setTheme(savedTheme);
+        }
+    } catch (e) {
+        console.warn('Could not load theme from localStorage:', e);
+    }
+}
+
     // Export to global namespace
     window.App.UI = {
         setupEventListeners,
         setTool,
         updateColorDisplay,
+        toggleTheme,
+        setTheme,
+        loadTheme,
         handleWheel,
         handlePointerDown,
         handlePointerMove,

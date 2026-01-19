@@ -13,6 +13,8 @@
     const state = {
         tool: 'pen',
         color: '#000000',
+        secondaryColor: '#ffffff',
+        colorHistory: [],
         brushSize: 4,
         fillTolerance: 10,
         fontFamily: 'Arial',
@@ -79,6 +81,9 @@
 
         // Restore toolbox position from localStorage
         App.UI.restoreToolboxPosition();
+
+        // Load theme from localStorage
+        App.UI.loadTheme();
     }
 
     // Export to global namespace
