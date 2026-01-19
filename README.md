@@ -19,6 +19,12 @@ No build process required - runs directly in the browser!
 - **Color Picker** (I): Sample colors from canvas
 - **Shape Tools**: Rectangle (R), Ellipse (C), Line (L)
 
+### Color System
+- **Primary/Secondary Colors**: Dual color system with swap functionality (X key)
+- **Color History**: 16 recent colors automatically saved to localStorage
+- **Preset Palette**: 36 Material Design colors for quick selection
+- **Color Interactions**: Left-click sets primary, right-click sets secondary
+
 ### Selection & Clipboard
 - **Rectangle Selection** (S): Select rectangular areas
 - **Lasso Selection** (A): Free-form selection with point-in-polygon detection
@@ -44,6 +50,7 @@ No build process required - runs directly in the browser!
 - Text tool with font family and size controls
 - File operations: Open image (PNG/JPG/WebP), Save as PNG
 - Drag-and-drop file upload
+- **Dark Mode**: Toggle between light/dark themes (Ctrl+Shift+D)
 - Keyboard shortcuts help (? or H)
 
 ## 📁 Project Structure
@@ -131,6 +138,10 @@ window.App = {
 - **Ctrl+0**: Reset Zoom (100%)
 - **Space+Drag**: Pan Canvas
 - **Tab**: Toggle Toolbox Visibility
+- **Ctrl+Shift+D**: Toggle Dark Mode
+
+### Colors
+- **X**: Swap Primary/Secondary Colors
 
 ### Other
 - **? or H**: Show Help Modal
@@ -138,7 +149,14 @@ window.App = {
 
 ## 🔧 Development
 
-### Recent Changes (2026-01-16)
+### Recent Changes
+
+**2026-01-19: UI Improvements v2**
+- ✅ Enhanced UI polish (improved icons, spacing, visual hierarchy)
+- ✅ Advanced color palette system (Primary/Secondary, history, presets)
+- ✅ Dark mode with theme toggle and localStorage persistence
+
+**2026-01-16: Code Modularization**
 - ✅ Refactored monolithic `main.js` (2800+ lines) into 10 modular files
 - ✅ Fixed namespace reference errors after modularization
 - ✅ All features verified and working correctly

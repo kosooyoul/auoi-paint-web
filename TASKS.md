@@ -11,6 +11,8 @@
 - ✅ Zoom & Pan (10%-500%, Ctrl+Wheel, Space+drag)
 - ✅ Canvas-centric UX with floating, draggable toolbox
 - ✅ Multi-layer system (up to 20 layers with visibility, opacity, reordering, merge, flatten)
+- ✅ Advanced color palette system (Primary/Secondary colors, history, presets)
+- ✅ Dark mode with theme toggle and localStorage persistence
 
 ## Suggested Next Tasks (Priority Order)
 
@@ -87,12 +89,36 @@
 - History system adapted for multi-layer snapshots
 - All drawing tools work on active layer
 
+### 7. [COMPLETED] ~~UI Improvements v2~~
+**Status:** ✅ Completed (2026-01-19)
+**Effort:** Medium (3-4 hours)
+**Value:** High - improved usability and modern aesthetics
+**Scope:**
+
+**UI Polish:**
+- Improved button icons with clearer Unicode characters
+- Enhanced spacing and alignment throughout toolbox
+- Section backgrounds with hover effects
+- Color accent bars on section labels
+
+**Advanced Color Palette System:**
+- Primary/Secondary color system with visual swatches
+- Swap colors button (or X keyboard shortcut)
+- Color history (16 recent colors, persisted to localStorage)
+- Preset color palette (36 Material Design colors)
+- Left-click sets primary, right-click sets secondary color
+
+**Dark Mode:**
+- CSS variable-based theme system
+- Light/Dark theme toggle in header (☀️/🌙)
+- Keyboard shortcut: Ctrl+Shift+D
+- Theme preference saved to localStorage
+- Smooth transitions between themes
+
 ## Known Issues / Tech Debt
 - History size reduced to 10 snapshots (from 50) due to multi-layer memory usage
 - Layer thumbnails update on commit only (not real-time)
 - Visibility/opacity changes don't create history entries (by design)
-- No layer naming UI (uses default "Layer N" names)
-- No drag-drop layer reordering (uses up/down buttons)
 
 ## Notes
 - All tasks assume Vanilla JS only, no frameworks

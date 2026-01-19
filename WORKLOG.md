@@ -1,5 +1,167 @@
 # Work Log
 
+## 2026-01-19 - Comprehensive UI Improvements v2
+
+### What Changed
+- Enhanced UI polish with improved icons, spacing, and visual hierarchy
+- Implemented advanced color palette system with Primary/Secondary colors
+- Added dark mode with theme toggle and localStorage persistence
+
+### Technical Details
+
+#### 1. UI Polish
+**Button Icons:**
+- Replaced emoji icons with clearer Unicode characters for better visibility
+- Examples: ✏️ (Pen), ⬜ (Eraser), ▨ (Fill), 🎨 (Color Picker)
+- Improved font rendering with font-size: 22px and line-height: 1
+
+**Spacing & Layout:**
+- Enhanced section spacing (18px margin-bottom, 14px padding)
+- Improved button grid gaps (10px for tools, 8px for actions)
+- Refined control row gaps (10px) and label styling
+
+**Visual Hierarchy:**
+- Added section backgrounds with hover effects
+- Implemented color accent bars on section labels (3px gradient bars)
+- Enhanced toolbox content padding for better breathing room
+
+#### 2. Advanced Color Palette System
+
+**Primary/Secondary Color System:**
+```javascript
+// State additions (app-state.js)
+state.color = '#000000';           // Primary color
+state.secondaryColor = '#ffffff';  // Secondary color
+state.colorHistory = [];           // Recent colors (max 16)
+```
+
+**UI Components (index.html):**
+- Dual color swatches with labels (Primary/Secondary)
+- Swap button with animated rotation effect (⇄ symbol)
+- Color history grid (8×2, 16 slots total)
+- Preset palette grid (8×5, 36 Material Design colors)
+
+**Interaction Patterns:**
+- Left-click color chip: Set as primary color
+- Right-click color chip: Set as secondary color
+- Click swap button or press X key: Swap primary ↔ secondary
+- Color history auto-updates and persists to localStorage
+
+**Implementation (ui-handlers.js):**
+```javascript
+function addToColorHistory(color) {
+    // Remove duplicates, add to front, limit to 16
+    state.colorHistory.unshift(color);
+    if (state.colorHistory.length > 16) {
+        state.colorHistory = state.colorHistory.slice(0, 16);
+    }
+    saveColorHistory();
+    renderColorHistory();
+}
+
+function initializeColorPalette() {
+    // 36 Material Design inspired colors
+    const colors = ['#000000', '#ffffff', '#e53935', ...];
+    // Create interactive color chips
+}
+```
+
+**localStorage Keys:**
+- `webpaint_colorHistory`: JSON array of recent colors
+
+#### 3. Dark Mode Implementation
+
+**CSS Variable System:**
+```css
+:root {
+    /* Light theme (default) */
+    --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+    --toolbox-bg: rgba(255, 255, 255, 0.95);
+    --text-primary: var(--neutral-900);
+    /* ... other theme variables */
+}
+
+[data-theme="dark"] {
+    /* Dark theme overrides */
+    --bg-gradient: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
+    --toolbox-bg: rgba(24, 24, 27, 0.95);
+    --text-primary: var(--neutral-900);
+    /* Inverted neutral colors for dark mode */
+}
+```
+
+**Theme Variables:**
+- `--bg-gradient`: Body background gradient
+- `--canvas-bg`: Canvas container background
+- `--toolbox-bg`: Toolbox background with transparency
+- `--toolbox-border`: Toolbox border color
+- `--section-bg`: Section background color
+- `--btn-bg`: Button gradient
+- `--text-primary`: Primary text color
+- `--text-inverse`: Inverse text color (for headers)
+
+**Theme Toggle UI:**
+- Button in floating header with sun/moon icon (☀️/🌙)
+- Icon rotates on hover (20deg)
+- Smooth transitions between themes (350ms)
+
+**Implementation (ui-handlers.js):**
+```javascript
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+}
+
+function setTheme(theme) {
+    if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        document.querySelector('.theme-icon').textContent = '🌙';
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        document.querySelector('.theme-icon').textContent = '☀️';
+    }
+    localStorage.setItem('webpaint_theme', theme);
+}
+```
+
+**Keyboard Shortcuts:**
+- X: Swap primary and secondary colors
+- Ctrl+Shift+D: Toggle dark mode
+
+**localStorage Keys:**
+- `webpaint_theme`: 'light' or 'dark'
+
+### Files Modified
+- `index.html`: Added color palette UI and theme toggle button
+- `styles.css`: CSS variables, dark theme, color palette styles (~200 lines)
+- `js/app-state.js`: Added secondaryColor and colorHistory to state
+- `js/ui-handlers.js`: Color palette functions, theme toggle logic (~150 lines)
+
+### Verification Steps
+1. Color palette:
+   - Left-click preset color → primary updates
+   - Right-click preset color → secondary updates
+   - Click swap button → colors swap
+   - Use color → appears in history
+   - Refresh page → history persists
+2. Dark mode:
+   - Click sun/moon button → theme switches
+   - Press Ctrl+Shift+D → theme switches
+   - Refresh page → theme persists
+3. UI polish:
+   - Icons are clear and visible
+   - Spacing feels balanced
+   - Section separation is clear
+
+### Impact
+- **Usability:** Faster color selection with presets and history
+- **Accessibility:** Dark mode reduces eye strain
+- **Visual Polish:** More professional and modern appearance
+- **User Preferences:** Theme and color history persist across sessions
+
+---
+
 ## 2026-01-16 - Code Modularization & Refactoring
 
 ### What Changed
