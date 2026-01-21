@@ -16,11 +16,12 @@
 
     // Application Constants
     const CONSTANTS = {
-        // History (reduced for multi-layer memory efficiency)
-        MAX_HISTORY_SIZE: 10,
+        // History (with incremental snapshots, can support more history)
+        BASE_MAX_HISTORY_SIZE: 20,  // Base history size for fewer layers
+        MIN_MAX_HISTORY_SIZE: 10,   // Minimum history size (many layers)
 
-        // Layers
-        MAX_LAYERS: 20,
+        // Layers (increased with incremental history optimization)
+        MAX_LAYERS: 50,
 
         // Zoom & Pan
         ZOOM_MIN: 0.1,              // 10%

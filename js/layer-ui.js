@@ -32,7 +32,7 @@ function addLayer() {
 
     App.Layers.compositeAllLayers();
     updateLayerUI();
-    App.History.saveState();
+    App.History.saveState(true); // Force full snapshot for layer structure change
 }
 
 /**
@@ -59,7 +59,7 @@ function deleteLayer(index) {
 
     App.Layers.compositeAllLayers();
     updateLayerUI();
-    App.History.saveState();
+    App.History.saveState(true); // Force full snapshot for layer structure change
 }
 
 /**
@@ -89,7 +89,7 @@ function moveLayerUp(index) {
 
     App.Layers.compositeAllLayers();
     updateLayerUI();
-    App.History.saveState();
+    App.History.saveState(true); // Force full snapshot for layer structure change
 }
 
 /**
@@ -110,7 +110,7 @@ function moveLayerDown(index) {
 
     App.Layers.compositeAllLayers();
     updateLayerUI();
-    App.History.saveState();
+    App.History.saveState(true); // Force full snapshot for layer structure change
 }
 
 /**
@@ -156,7 +156,7 @@ function mergeLayerDown(index) {
 
     App.Layers.compositeAllLayers();
     updateLayerUI();
-    App.History.saveState();
+    App.History.saveState(true); // Force full snapshot for layer structure change
 }
 
 /**
@@ -185,7 +185,7 @@ function flattenAllLayers() {
 
     App.Layers.compositeAllLayers();
     updateLayerUI();
-    App.History.saveState();
+    App.History.saveState(true); // Force full snapshot for layer structure change
 }
 
 /**
@@ -209,7 +209,7 @@ function reorderLayerByDrag(fromIndex, toIndex) {
 
     App.Layers.compositeAllLayers();
     updateLayerUI();
-    App.History.saveState();
+    App.History.saveState(true); // Force full snapshot for layer structure change
 }
 
 /**
@@ -239,7 +239,7 @@ function setLayerBlendMode(index, blendMode) {
     state.layers[index].blendMode = blendMode;
     App.Layers.compositeAllLayers();
     updateLayerUI();
-    App.History.saveState();
+    App.History.saveState(true); // Force full snapshot for layer structure change
 }
 
 /**
@@ -425,7 +425,7 @@ function createLayerItemElement(layer, index) {
         opacityValue.textContent = `${e.target.value}%`;
     };
     opacitySlider.onchange = () => {
-        App.History.saveState(); // Save state on slider release
+        App.History.saveState(true); // Save state on slider release (full snapshot for layer property change)
     };
 
     const opacityValue = document.createElement('span');
