@@ -54,7 +54,23 @@
         panStartX: 0,             // Pan gesture start point
         panStartY: 0,
         spaceKeyPressed: false,   // Track spacebar state
-        originalCursor: 'crosshair'
+        originalCursor: 'crosshair',
+
+        // Symmetry/Mirror Drawing state
+        symmetryMode: 'none',     // 'none' | 'horizontal' | 'vertical' | 'radial'
+        symmetryPointCount: 4,    // For radial symmetry (2-12)
+
+        // Grid & Guides state
+        gridEnabled: false,       // Show/hide grid overlay
+        gridSize: 20,             // Grid cell size in pixels
+        snapToGrid: false,        // Snap drawing to grid points
+
+        // Export settings
+        exportFormat: 'png',      // 'png' | 'jpeg' | 'webp'
+        exportQuality: 0.92,      // JPEG/WebP quality (0.0 - 1.0)
+
+        // Gradient tool settings
+        gradientType: 'linear'    // 'linear' | 'radial'
     };
 
     // Initialize application

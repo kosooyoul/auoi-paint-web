@@ -13,6 +13,55 @@
     const state = App.State.state;
 
     // ===============================
+    // Symmetry Helper
+    // ===============================
+
+    function getSymmetryPoints(x, y) {
+        const points = [];
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        switch (state.symmetryMode) {
+            case 'horizontal':
+                // Mirror horizontally across vertical center line
+                points.push({ x: canvas.width - x, y: y });
+                break;
+
+            case 'vertical':
+                // Mirror vertically across horizontal center line
+                points.push({ x: x, y: canvas.height - y });
+                break;
+
+            case 'radial':
+                // Radial symmetry around canvas center
+                const pointCount = state.symmetryPointCount;
+                const angleStep = (2 * Math.PI) / pointCount;
+
+                // Calculate distance and angle from center
+                const dx = x - centerX;
+                const dy = y - centerY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const angle = Math.atan2(dy, dx);
+
+                // Generate symmetry points (skip first as it's the original)
+                for (let i = 1; i < pointCount; i++) {
+                    const newAngle = angle + angleStep * i;
+                    const newX = centerX + distance * Math.cos(newAngle);
+                    const newY = centerY + distance * Math.sin(newAngle);
+                    points.push({ x: newX, y: newY });
+                }
+                break;
+
+            case 'none':
+            default:
+                // No symmetry
+                break;
+        }
+
+        return points;
+    }
+
+    // ===============================
     // Pen Tool
     // ===============================
 
@@ -24,12 +73,30 @@
         layer.ctx.lineWidth = state.brushSize;
         layer.ctx.beginPath();
         layer.ctx.moveTo(x, y);
+
+        // Apply symmetry for start position
+        if (state.symmetryMode !== 'none') {
+            const symmetryPoints = getSymmetryPoints(x, y);
+            symmetryPoints.forEach(point => {
+                layer.ctx.moveTo(point.x, point.y);
+            });
+        }
     }
 
     function drawPen(x, y) {
         const layer = App.Layers.getActiveLayer();
         layer.ctx.lineTo(x, y);
         layer.ctx.stroke();
+
+        // Apply symmetry
+        if (state.symmetryMode !== 'none') {
+            const symmetryPoints = getSymmetryPoints(x, y);
+            symmetryPoints.forEach(point => {
+                layer.ctx.lineTo(point.x, point.y);
+                layer.ctx.stroke();
+            });
+        }
+
         App.Layers.compositeAllLayers(); // Update display
         App.LayerUI.updateActiveLayerThumbnailThrottled(); // Real-time thumbnail update
         state.lastX = x;
@@ -48,12 +115,30 @@
         layer.ctx.lineWidth = state.brushSize;
         layer.ctx.beginPath();
         layer.ctx.moveTo(x, y);
+
+        // Apply symmetry for start position
+        if (state.symmetryMode !== 'none') {
+            const symmetryPoints = getSymmetryPoints(x, y);
+            symmetryPoints.forEach(point => {
+                layer.ctx.moveTo(point.x, point.y);
+            });
+        }
     }
 
     function drawEraser(x, y) {
         const layer = App.Layers.getActiveLayer();
         layer.ctx.lineTo(x, y);
         layer.ctx.stroke();
+
+        // Apply symmetry
+        if (state.symmetryMode !== 'none') {
+            const symmetryPoints = getSymmetryPoints(x, y);
+            symmetryPoints.forEach(point => {
+                layer.ctx.lineTo(point.x, point.y);
+                layer.ctx.stroke();
+            });
+        }
+
         App.Layers.compositeAllLayers(); // Update display
         App.LayerUI.updateActiveLayerThumbnailThrottled(); // Real-time thumbnail update
         state.lastX = x;
@@ -256,6 +341,44 @@
         return rDiff <= tolerance && gDiff <= tolerance && bDiff <= tolerance;
     }
 
+    // ===============================
+    // Gradient Tool
+    // ===============================
+
+    function previewGradient(x, y) {
+        const layer = App.Layers.getActiveLayer();
+        // Restore active layer to clean state
+        layer.ctx.putImageData(state.tempCanvas, 0, 0);
+        layer.ctx.globalCompositeOperation = 'source-over';
+
+        // Create gradient based on type
+        let gradient;
+        if (state.gradientType === 'linear') {
+            // Linear gradient from start to end point
+            gradient = layer.ctx.createLinearGradient(state.startX, state.startY, x, y);
+        } else {
+            // Radial gradient from start point outward
+            const dx = x - state.startX;
+            const dy = y - state.startY;
+            const radius = Math.sqrt(dx * dx + dy * dy);
+            gradient = layer.ctx.createRadialGradient(
+                state.startX, state.startY, 0,
+                state.startX, state.startY, radius
+            );
+        }
+
+        // Add color stops (primary to secondary)
+        gradient.addColorStop(0, state.color);
+        gradient.addColorStop(1, state.secondaryColor);
+
+        // Fill canvas with gradient
+        layer.ctx.fillStyle = gradient;
+        layer.ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        App.Layers.compositeAllLayers(); // Update display
+        App.LayerUI.updateActiveLayerThumbnailThrottled(); // Real-time thumbnail update
+    }
+
     // Export to global namespace
     window.App.DrawingTools = {
         drawPenStart,
@@ -267,10 +390,12 @@
         previewLine,
         pickColor,
         floodFill,
+        previewGradient,
         // Helper functions (exported for potential reuse)
         getPixelColor,
         setPixelColor,
         hexToRgb,
-        colorsMatch
+        colorsMatch,
+        getSymmetryPoints
     };
 })();

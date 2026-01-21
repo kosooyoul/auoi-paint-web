@@ -82,6 +82,40 @@
         // Copy composite to display canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(state.compositeCanvas, 0, 0);
+
+        // Draw grid overlay if enabled
+        if (state.gridEnabled) {
+            drawGrid();
+        }
+    }
+
+    /**
+     * Draw grid overlay on display canvas
+     */
+    function drawGrid() {
+        const gridSize = state.gridSize;
+
+        ctx.save();
+        ctx.strokeStyle = 'rgba(100, 100, 255, 0.3)';
+        ctx.lineWidth = 1;
+
+        // Vertical lines
+        for (let x = 0; x <= canvas.width; x += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+        }
+
+        // Horizontal lines
+        for (let y = 0; y <= canvas.height; y += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
+
+        ctx.restore();
     }
 
     /**
@@ -123,6 +157,7 @@
         initializeLayerSystem,
         compositeAllLayers,
         getActiveLayer,
-        createLayerFromData
+        createLayerFromData,
+        drawGrid
     };
 })();

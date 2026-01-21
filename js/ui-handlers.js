@@ -14,6 +14,19 @@
     const CONSTANTS = App.Constants.CONSTANTS;
     const state = App.State.state;
 
+// Helper: Snap coordinates to grid if enabled
+function snapToGrid(x, y) {
+    if (!state.snapToGrid) {
+        return { x, y };
+    }
+
+    const gridSize = state.gridSize;
+    return {
+        x: Math.round(x / gridSize) * gridSize,
+        y: Math.round(y / gridSize) * gridSize
+    };
+}
+
 function setupEventListeners() {
     // Canvas events
     canvas.addEventListener('pointerdown', handlePointerDown);
@@ -27,6 +40,7 @@ function setupEventListeners() {
     document.getElementById('tool-eraser').addEventListener('click', () => setTool('eraser'));
     document.getElementById('tool-fill').addEventListener('click', () => setTool('fill'));
     document.getElementById('tool-picker').addEventListener('click', () => setTool('picker'));
+    document.getElementById('tool-gradient').addEventListener('click', () => setTool('gradient'));
     document.getElementById('tool-select').addEventListener('click', () => setTool('select'));
     document.getElementById('tool-lasso').addEventListener('click', () => setTool('lasso'));
     document.getElementById('tool-text').addEventListener('click', () => setTool('text'));
@@ -35,6 +49,12 @@ function setupEventListeners() {
     document.getElementById('shape-rect').addEventListener('click', () => setTool('rect'));
     document.getElementById('shape-ellipse').addEventListener('click', () => setTool('ellipse'));
     document.getElementById('shape-line').addEventListener('click', () => setTool('line'));
+
+    // Symmetry buttons
+    document.getElementById('symmetry-none').addEventListener('click', () => setSymmetry('none'));
+    document.getElementById('symmetry-horizontal').addEventListener('click', () => setSymmetry('horizontal'));
+    document.getElementById('symmetry-vertical').addEventListener('click', () => setSymmetry('vertical'));
+    document.getElementById('symmetry-radial').addEventListener('click', () => setSymmetry('radial'));
 
     // Color picker
     document.getElementById('color-picker').addEventListener('input', (e) => {
@@ -74,6 +94,47 @@ function setupEventListeners() {
     document.getElementById('fill-tolerance').addEventListener('input', (e) => {
         state.fillTolerance = parseInt(e.target.value);
         document.getElementById('fill-tolerance-value').textContent = state.fillTolerance;
+    });
+
+    // Grid controls
+    document.getElementById('grid-enabled').addEventListener('change', (e) => {
+        state.gridEnabled = e.target.checked;
+        App.Layers.compositeAllLayers(); // Redraw to show/hide grid
+    });
+
+    document.getElementById('grid-size').addEventListener('input', (e) => {
+        state.gridSize = parseInt(e.target.value);
+        document.getElementById('grid-size-value').textContent = state.gridSize;
+        if (state.gridEnabled) {
+            App.Layers.compositeAllLayers(); // Redraw grid with new size
+        }
+    });
+
+    document.getElementById('snap-to-grid').addEventListener('change', (e) => {
+        state.snapToGrid = e.target.checked;
+    });
+
+    // Export format controls
+    document.getElementById('export-format').addEventListener('change', (e) => {
+        state.exportFormat = e.target.value;
+        // Show/hide quality slider for lossy formats
+        const qualityRow = document.getElementById('quality-row');
+        if (e.target.value === 'png') {
+            qualityRow.style.display = 'none';
+        } else {
+            qualityRow.style.display = 'flex';
+        }
+    });
+
+    document.getElementById('export-quality').addEventListener('input', (e) => {
+        const quality = parseInt(e.target.value);
+        state.exportQuality = quality / 100; // Convert to 0.0-1.0
+        document.getElementById('export-quality-value').textContent = `${quality}%`;
+    });
+
+    // Gradient controls
+    document.getElementById('gradient-type').addEventListener('change', (e) => {
+        state.gradientType = e.target.value;
     });
 
     // Font controls
@@ -163,6 +224,7 @@ function setTool(tool) {
         'eraser': 'tool-eraser',
         'fill': 'tool-fill',
         'picker': 'tool-picker',
+        'gradient': 'tool-gradient',
         'select': 'tool-select',
         'lasso': 'tool-lasso',
         'text': 'tool-text',
@@ -181,6 +243,29 @@ function setTool(tool) {
     // Clear selection if switching away from selection tools
     if (tool !== 'select' && tool !== 'lasso' && state.selection) {
         state.selection = null;
+    }
+}
+
+// Symmetry Management
+function setSymmetry(mode) {
+    state.symmetryMode = mode;
+
+    // Update UI - highlight active symmetry button
+    document.getElementById('symmetry-none').classList.remove('active');
+    document.getElementById('symmetry-horizontal').classList.remove('active');
+    document.getElementById('symmetry-vertical').classList.remove('active');
+    document.getElementById('symmetry-radial').classList.remove('active');
+
+    const symmetryMap = {
+        'none': 'symmetry-none',
+        'horizontal': 'symmetry-horizontal',
+        'vertical': 'symmetry-vertical',
+        'radial': 'symmetry-radial'
+    };
+
+    const btnId = symmetryMap[mode];
+    if (btnId) {
+        document.getElementById(btnId).classList.add('active');
     }
 }
 
@@ -351,8 +436,12 @@ function handlePointerDown(e) {
 
     // Transform coordinates
     const coords = App.ZoomPan.screenToCanvas(e.clientX, e.clientY);
-    const x = coords.x;
-    const y = coords.y;
+    let { x, y } = coords;
+
+    // Apply snap to grid if enabled
+    const snapped = snapToGrid(x, y);
+    x = snapped.x;
+    y = snapped.y;
 
     // Handle paste mode
     if (state.pasteMode) {
@@ -394,7 +483,7 @@ function handlePointerDown(e) {
         // Start lasso path
         state.lassoPath = [{x, y}];
         state.tempCanvas = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    } else if (['rect', 'ellipse', 'line'].includes(state.tool)) {
+    } else if (['rect', 'ellipse', 'line', 'gradient'].includes(state.tool)) {
         // Save active layer state for preview
         const layer = App.Layers.getActiveLayer();
         state.tempCanvas = layer.ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -412,8 +501,12 @@ function handlePointerMove(e) {
 
     // Transform coordinates
     const coords = App.ZoomPan.screenToCanvas(e.clientX, e.clientY);
-    const x = coords.x;
-    const y = coords.y;
+    let { x, y } = coords;
+
+    // Apply snap to grid if enabled
+    const snapped = snapToGrid(x, y);
+    x = snapped.x;
+    y = snapped.y;
 
     // Update status bar
     document.getElementById('status-coords').textContent = `X: ${Math.floor(x)}, Y: ${Math.floor(y)}`;
@@ -452,6 +545,8 @@ function handlePointerMove(e) {
         App.DrawingTools.previewEllipse(x, y);
     } else if (state.tool === 'line') {
         App.DrawingTools.previewLine(x, y);
+    } else if (state.tool === 'gradient') {
+        App.DrawingTools.previewGradient(x, y);
     }
 }
 
@@ -490,8 +585,8 @@ function handlePointerUp(e) {
     } else if (state.tool === 'lasso') {
         // Finalize lasso selection
         App.SelectionTools.finalizeLassoSelection();
-    } else if (['rect', 'ellipse', 'line'].includes(state.tool)) {
-        // Finalize shape
+    } else if (['rect', 'ellipse', 'line', 'gradient'].includes(state.tool)) {
+        // Finalize shape or gradient
         App.History.saveState();
         state.tempCanvas = null;
         // Redraw selection marquee after shape
@@ -905,6 +1000,7 @@ function loadTheme() {
     window.App.UI = {
         setupEventListeners,
         setTool,
+        setSymmetry,
         updateColorDisplay,
         toggleTheme,
         setTheme,

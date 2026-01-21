@@ -72,20 +72,33 @@
     }
 
     /**
-     * Save current canvas as PNG file
+     * Save current canvas as image file (PNG/JPEG/WebP)
      */
     async function saveImage() {
         await withLoading(async () => {
             return new Promise((resolve) => {
+                const format = state.exportFormat;
+                const quality = state.exportQuality;
+
+                // Map format to MIME type
+                const mimeTypes = {
+                    'png': 'image/png',
+                    'jpeg': 'image/jpeg',
+                    'webp': 'image/webp'
+                };
+
+                const mimeType = mimeTypes[format] || 'image/png';
+
+                // For PNG, quality is not used
                 canvas.toBlob((blob) => {
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `paint-${Date.now()}.png`;
+                    a.download = `paint-${Date.now()}.${format}`;
                     a.click();
                     URL.revokeObjectURL(url);
                     resolve();
-                });
+                }, mimeType, quality);
             });
         }, 'Saving image...');
     }
