@@ -1,0 +1,503 @@
+/**
+ * drawing-tools.test.js
+ * Tests for drawing tools module
+ */
+
+describe('Drawing Tools System', () => {
+    let mockCanvas, mockCtx, mockLayer;
+
+    beforeAll(() => {
+
+        // Setup mock canvas first (without getContext)
+        mockCanvas = {
+            width: 800,
+            height: 600
+        };
+
+        // Setup mock context (can reference mockCanvas now)
+        mockCtx = {
+            lineCap: '',
+            lineJoin: '',
+            strokeStyle: '',
+            lineWidth: 0,
+            fillStyle: '',
+            globalCompositeOperation: 'source-over',
+            beginPath: jest.fn(),
+            moveTo: jest.fn(),
+            lineTo: jest.fn(),
+            stroke: jest.fn(),
+            strokeRect: jest.fn(),
+            ellipse: jest.fn(),
+            fillRect: jest.fn(),
+            putImageData: jest.fn(),
+            getImageData: jest.fn(() => ({
+                data: new Uint8ClampedArray(mockCanvas.width * mockCanvas.height * 4),
+                width: mockCanvas.width,
+                height: mockCanvas.height
+            })),
+            createLinearGradient: jest.fn(() => ({
+                addColorStop: jest.fn()
+            })),
+            createRadialGradient: jest.fn(() => ({
+                addColorStop: jest.fn()
+            }))
+        };
+
+        // Add getContext to mockCanvas (now mockCtx exists)
+        mockCanvas.getContext = jest.fn(() => mockCtx);
+
+        mockLayer = {
+            id: 'test-layer',
+            canvas: mockCanvas,
+            ctx: mockCtx,
+            name: 'Test Layer',
+            visible: true,
+            opacity: 1.0
+        };
+
+        // Setup global App namespace
+        global.window = {
+            App: {
+                Constants: {
+                    canvas: mockCanvas,
+                    ctx: mockCtx
+                },
+                State: {
+                    state: {
+                        color: '#ff0000',
+                        secondaryColor: '#0000ff',
+                        brushSize: 4,
+                        fillTolerance: 0,
+                        symmetryMode: 'none',
+                        symmetryPointCount: 4,
+                        gradientType: 'linear',
+                        startX: 0,
+                        startY: 0,
+                        lastX: 0,
+                        lastY: 0,
+                        tempCanvas: mockCtx.getImageData(0, 0, mockCanvas.width, mockCanvas.height)
+                    }
+                },
+                Layers: {
+                    getActiveLayer: jest.fn(() => mockLayer),
+                    compositeAllLayers: jest.fn()
+                },
+                LayerUI: {
+                    updateActiveLayerThumbnailThrottled: jest.fn()
+                },
+                UI: {
+                    updateColorDisplay: jest.fn()
+                }
+            }
+        };
+
+        // Mock DOM elements
+        global.document = {
+            getElementById: jest.fn((id) => {
+                if (id === 'canvas') {
+                    return mockCanvas;
+                }
+                if (id === 'color-picker') {
+                    return { value: '#ff0000' };
+                }
+                if (id === 'undo-btn' || id === 'redo-btn') {
+                    return { disabled: false };
+                }
+                return null;
+            }),
+            createElement: jest.fn((tag) => {
+                if (tag === 'canvas') {
+                    return {
+                        width: 0,
+                        height: 0,
+                        getContext: jest.fn(() => mockCtx)
+                    };
+                }
+                return null;
+            })
+        };
+
+        // Load dependency modules first
+        require('../js/app-constants.js');
+        require('../js/app-state.js');
+        require('../js/layer-core.js');
+
+        // Load the module
+        require('../js/drawing-tools.js');
+    });
+
+    beforeEach(() => {
+        // Reset mock function calls
+        jest.clearAllMocks();
+
+        // Reset state for each test
+        window.App.State.state.color = '#ff0000';
+        window.App.State.state.brushSize = 4;
+        window.App.State.state.symmetryMode = 'none';
+        window.App.State.state.startX = 0;
+        window.App.State.state.startY = 0;
+    });
+
+    // ============================
+    // Helper Functions Tests
+    // ============================
+
+    describe('hexToRgb', () => {
+        it('should convert hex color to RGB array', () => {
+            const result = window.App.DrawingTools.hexToRgb('#ff0000');
+            expect(result).toEqual([255, 0, 0, 255]);
+        });
+
+        it('should handle lowercase hex', () => {
+            const result = window.App.DrawingTools.hexToRgb('#00ff00');
+            expect(result).toEqual([0, 255, 0, 255]);
+        });
+
+        it('should handle mixed case hex', () => {
+            const result = window.App.DrawingTools.hexToRgb('#0000FF');
+            expect(result).toEqual([0, 0, 255, 255]);
+        });
+
+        it('should handle white color', () => {
+            const result = window.App.DrawingTools.hexToRgb('#ffffff');
+            expect(result).toEqual([255, 255, 255, 255]);
+        });
+
+        it('should handle black color', () => {
+            const result = window.App.DrawingTools.hexToRgb('#000000');
+            expect(result).toEqual([0, 0, 0, 255]);
+        });
+    });
+
+    describe('colorsMatch', () => {
+        it('should match identical colors with zero tolerance', () => {
+            const c1 = [255, 0, 0, 255];
+            const c2 = [255, 0, 0, 255];
+            expect(window.App.DrawingTools.colorsMatch(c1, c2, 0)).toBe(true);
+        });
+
+        it('should not match different colors with zero tolerance', () => {
+            const c1 = [255, 0, 0, 255];
+            const c2 = [254, 0, 0, 255];
+            expect(window.App.DrawingTools.colorsMatch(c1, c2, 0)).toBe(false);
+        });
+
+        it('should match similar colors within tolerance', () => {
+            const c1 = [255, 0, 0, 255];
+            const c2 = [250, 5, 3, 255];
+            expect(window.App.DrawingTools.colorsMatch(c1, c2, 5)).toBe(true);
+        });
+
+        it('should not match colors outside tolerance', () => {
+            const c1 = [255, 0, 0, 255];
+            const c2 = [240, 0, 0, 255];
+            expect(window.App.DrawingTools.colorsMatch(c1, c2, 10)).toBe(false);
+        });
+
+        it('should not match if alpha differs', () => {
+            const c1 = [255, 0, 0, 255];
+            const c2 = [255, 0, 0, 200];
+            expect(window.App.DrawingTools.colorsMatch(c1, c2, 100)).toBe(false);
+        });
+    });
+
+    describe('getPixelColor', () => {
+        it('should get correct pixel color at position', () => {
+            const pixels = new Uint8ClampedArray([
+                255, 0, 0, 255,  // (0,0) - red
+                0, 255, 0, 255,  // (1,0) - green
+                0, 0, 255, 255   // (2,0) - blue
+            ]);
+
+            // Mock canvas width for pixel calculation
+            window.App.Constants.canvas.width = 3;
+
+            const color1 = window.App.DrawingTools.getPixelColor(pixels, 0, 0);
+            expect(color1).toEqual([255, 0, 0, 255]);
+
+            const color2 = window.App.DrawingTools.getPixelColor(pixels, 1, 0);
+            expect(color2).toEqual([0, 255, 0, 255]);
+
+            const color3 = window.App.DrawingTools.getPixelColor(pixels, 2, 0);
+            expect(color3).toEqual([0, 0, 255, 255]);
+        });
+    });
+
+    describe('setPixelColor', () => {
+        it('should set pixel color at position', () => {
+            const pixels = new Uint8ClampedArray(12); // 3x1 canvas
+            window.App.Constants.canvas.width = 3;
+
+            window.App.DrawingTools.setPixelColor(pixels, 1, 0, [0, 255, 0, 255]);
+
+            expect(pixels[4]).toBe(0);   // R
+            expect(pixels[5]).toBe(255); // G
+            expect(pixels[6]).toBe(0);   // B
+            expect(pixels[7]).toBe(255); // A
+        });
+
+        it('should handle setting multiple pixels', () => {
+            const pixels = new Uint8ClampedArray(12); // 3x1 canvas
+            window.App.Constants.canvas.width = 3;
+
+            window.App.DrawingTools.setPixelColor(pixels, 0, 0, [255, 0, 0, 255]);
+            window.App.DrawingTools.setPixelColor(pixels, 2, 0, [0, 0, 255, 255]);
+
+            expect(pixels[0]).toBe(255);  // First pixel R
+            expect(pixels[8]).toBe(0);    // Third pixel R
+            expect(pixels[10]).toBe(255); // Third pixel B
+        });
+    });
+
+    // ============================
+    // Symmetry Tests
+    // ============================
+
+    describe('getSymmetryPoints', () => {
+        beforeEach(() => {
+            window.App.Constants.canvas.width = 800;
+            window.App.Constants.canvas.height = 600;
+        });
+
+        it('should return empty array for none symmetry mode', () => {
+            window.App.State.state.symmetryMode = 'none';
+            const points = window.App.DrawingTools.getSymmetryPoints(100, 100);
+            expect(points).toEqual([]);
+        });
+
+        it('should return horizontal mirror point', () => {
+            window.App.State.state.symmetryMode = 'horizontal';
+            const points = window.App.DrawingTools.getSymmetryPoints(200, 300);
+            expect(points.length).toBe(1);
+            expect(points[0].x).toBe(600); // 800 - 200
+            expect(points[0].y).toBe(300);
+        });
+
+        it('should return vertical mirror point', () => {
+            window.App.State.state.symmetryMode = 'vertical';
+            const points = window.App.DrawingTools.getSymmetryPoints(400, 200);
+            expect(points.length).toBe(1);
+            expect(points[0].x).toBe(400);
+            expect(points[0].y).toBe(400); // 600 - 200
+        });
+
+        it('should return radial symmetry points', () => {
+            window.App.State.state.symmetryMode = 'radial';
+            window.App.State.state.symmetryPointCount = 4;
+            const points = window.App.DrawingTools.getSymmetryPoints(500, 300);
+            expect(points.length).toBe(3); // 4 total - 1 original
+        });
+
+        it('should calculate correct radial symmetry for 6 points', () => {
+            window.App.State.state.symmetryMode = 'radial';
+            window.App.State.state.symmetryPointCount = 6;
+            const points = window.App.DrawingTools.getSymmetryPoints(500, 300);
+            expect(points.length).toBe(5); // 6 total - 1 original
+        });
+    });
+
+    // ============================
+    // Color Picker Tests
+    // ============================
+
+    describe('pickColor', () => {
+        it('should pick color from canvas and update state', () => {
+            const mockImageData = {
+                data: new Uint8ClampedArray([255, 128, 64, 255])
+            };
+            mockCtx.getImageData = jest.fn(() => mockImageData);
+
+            window.App.DrawingTools.pickColor(10, 20);
+
+            expect(mockCtx.getImageData).toHaveBeenCalledWith(10, 20, 1, 1);
+            expect(window.App.State.state.color).toBe('#ff8040');
+        });
+
+        it('should handle white color', () => {
+            const mockImageData = {
+                data: new Uint8ClampedArray([255, 255, 255, 255])
+            };
+            mockCtx.getImageData = jest.fn(() => mockImageData);
+
+            window.App.DrawingTools.pickColor(0, 0);
+
+            expect(window.App.State.state.color).toBe('#ffffff');
+        });
+
+        it('should handle black color', () => {
+            const mockImageData = {
+                data: new Uint8ClampedArray([0, 0, 0, 255])
+            };
+            mockCtx.getImageData = jest.fn(() => mockImageData);
+
+            window.App.DrawingTools.pickColor(0, 0);
+
+            expect(window.App.State.state.color).toBe('#000000');
+        });
+    });
+
+    // ============================
+    // Pen Tool Tests
+    // ============================
+
+    describe('drawPenStart', () => {
+        it('should initialize pen drawing context', () => {
+            window.App.DrawingTools.drawPenStart(100, 100);
+
+            expect(mockCtx.lineCap).toBe('round');
+            expect(mockCtx.lineJoin).toBe('round');
+            expect(mockCtx.strokeStyle).toBe('#ff0000');
+            expect(mockCtx.lineWidth).toBe(4);
+            expect(mockCtx.beginPath).toHaveBeenCalled();
+            expect(mockCtx.moveTo).toHaveBeenCalledWith(100, 100);
+        });
+
+        it('should apply symmetry points on start', () => {
+            window.App.State.state.symmetryMode = 'horizontal';
+            window.App.DrawingTools.drawPenStart(200, 300);
+
+            expect(mockCtx.moveTo).toHaveBeenCalledTimes(2); // original + symmetry
+            expect(mockCtx.moveTo).toHaveBeenCalledWith(200, 300);
+            expect(mockCtx.moveTo).toHaveBeenCalledWith(600, 300);
+        });
+    });
+
+    describe('drawPen', () => {
+        it('should draw line to position', () => {
+            window.App.DrawingTools.drawPen(150, 150);
+
+            expect(mockCtx.lineTo).toHaveBeenCalledWith(150, 150);
+            expect(mockCtx.stroke).toHaveBeenCalled();
+            expect(window.App.Layers.compositeAllLayers).toHaveBeenCalled();
+        });
+
+        it('should update lastX and lastY', () => {
+            window.App.DrawingTools.drawPen(200, 250);
+
+            expect(window.App.State.state.lastX).toBe(200);
+            expect(window.App.State.state.lastY).toBe(250);
+        });
+    });
+
+    // ============================
+    // Eraser Tool Tests
+    // ============================
+
+    describe('drawEraserStart', () => {
+        it('should initialize eraser with destination-out composite', () => {
+            window.App.DrawingTools.drawEraserStart(100, 100);
+
+            expect(mockCtx.globalCompositeOperation).toBe('destination-out');
+            expect(mockCtx.lineCap).toBe('round');
+            expect(mockCtx.lineJoin).toBe('round');
+            expect(mockCtx.beginPath).toHaveBeenCalled();
+        });
+    });
+
+    describe('drawEraser', () => {
+        it('should erase at position', () => {
+            window.App.DrawingTools.drawEraser(150, 150);
+
+            expect(mockCtx.lineTo).toHaveBeenCalledWith(150, 150);
+            expect(mockCtx.stroke).toHaveBeenCalled();
+        });
+    });
+
+    // ============================
+    // Shape Preview Tests
+    // ============================
+
+    describe('previewRect', () => {
+        it('should draw rectangle preview', () => {
+            window.App.State.state.startX = 100;
+            window.App.State.state.startY = 100;
+
+            window.App.DrawingTools.previewRect(200, 200);
+
+            expect(mockCtx.putImageData).toHaveBeenCalled();
+            expect(mockCtx.strokeRect).toHaveBeenCalledWith(100, 100, 100, 100);
+        });
+
+        it('should handle negative dimensions', () => {
+            window.App.State.state.startX = 200;
+            window.App.State.state.startY = 200;
+
+            window.App.DrawingTools.previewRect(100, 100);
+
+            expect(mockCtx.strokeRect).toHaveBeenCalledWith(200, 200, -100, -100);
+        });
+    });
+
+    describe('previewEllipse', () => {
+        it('should draw ellipse preview', () => {
+            window.App.State.state.startX = 100;
+            window.App.State.state.startY = 100;
+
+            window.App.DrawingTools.previewEllipse(200, 200);
+
+            expect(mockCtx.putImageData).toHaveBeenCalled();
+            expect(mockCtx.beginPath).toHaveBeenCalled();
+            expect(mockCtx.ellipse).toHaveBeenCalled();
+            expect(mockCtx.stroke).toHaveBeenCalled();
+        });
+
+        it('should calculate correct center and radii', () => {
+            window.App.State.state.startX = 100;
+            window.App.State.state.startY = 100;
+
+            window.App.DrawingTools.previewEllipse(300, 200);
+
+            const call = mockCtx.ellipse.mock.calls[0];
+            expect(call[0]).toBe(200); // centerX
+            expect(call[1]).toBe(150); // centerY
+            expect(call[2]).toBe(100); // radiusX
+            expect(call[3]).toBe(50);  // radiusY
+        });
+    });
+
+    describe('previewLine', () => {
+        it('should draw line preview', () => {
+            window.App.State.state.startX = 100;
+            window.App.State.state.startY = 100;
+
+            window.App.DrawingTools.previewLine(200, 200);
+
+            expect(mockCtx.putImageData).toHaveBeenCalled();
+            expect(mockCtx.beginPath).toHaveBeenCalled();
+            expect(mockCtx.moveTo).toHaveBeenCalledWith(100, 100);
+            expect(mockCtx.lineTo).toHaveBeenCalledWith(200, 200);
+            expect(mockCtx.stroke).toHaveBeenCalled();
+        });
+    });
+
+    // ============================
+    // Gradient Tests
+    // ============================
+
+    describe('previewGradient', () => {
+        it('should create linear gradient', () => {
+            window.App.State.state.gradientType = 'linear';
+            window.App.State.state.startX = 100;
+            window.App.State.state.startY = 100;
+
+            window.App.DrawingTools.previewGradient(200, 200);
+
+            expect(mockCtx.createLinearGradient).toHaveBeenCalledWith(100, 100, 200, 200);
+            expect(mockCtx.fillRect).toHaveBeenCalled();
+        });
+
+        it('should create radial gradient', () => {
+            window.App.State.state.gradientType = 'radial';
+            window.App.State.state.startX = 100;
+            window.App.State.state.startY = 100;
+
+            window.App.DrawingTools.previewGradient(200, 200);
+
+            expect(mockCtx.createRadialGradient).toHaveBeenCalled();
+            const call = mockCtx.createRadialGradient.mock.calls[0];
+            expect(call[0]).toBe(100); // x0
+            expect(call[1]).toBe(100); // y0
+            expect(call[2]).toBe(0);   // r0
+        });
+    });
+});

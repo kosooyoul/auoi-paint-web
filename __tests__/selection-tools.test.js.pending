@@ -1,0 +1,632 @@
+/**
+ * selection-tools.test.js
+ * Tests for selection tools module
+ */
+
+describe('Selection Tools System', () => {
+    let mockCanvas, mockCtx, mockLayer;
+
+    beforeAll(() => {
+
+        // Setup mock canvas first (without getContext)
+        mockCanvas = {
+            width: 800,
+            height: 600
+        };
+
+        // Setup mock context
+        mockCtx = {
+            strokeStyle: '',
+            lineWidth: 0,
+            globalCompositeOperation: 'source-over',
+            fillStyle: '',
+            beginPath: jest.fn(),
+            moveTo: jest.fn(),
+            lineTo: jest.fn(),
+            closePath: jest.fn(),
+            stroke: jest.fn(),
+            strokeRect: jest.fn(),
+            fillRect: jest.fn(),
+            setLineDash: jest.fn(),
+            putImageData: jest.fn(),
+            getImageData: jest.fn(() => ({
+                data: new Uint8ClampedArray(100 * 100 * 4),
+                width: 100,
+                height: 100
+            }))
+        };
+
+        // Add getContext to mockCanvas
+        mockCanvas.getContext = jest.fn(() => mockCtx);
+
+        mockLayer = {
+            id: 'test-layer',
+            canvas: mockCanvas,
+            ctx: mockCtx,
+            name: 'Test Layer',
+            visible: true,
+            opacity: 1.0
+        };
+
+        // Setup global App namespace
+        global.window = {
+            App: {
+                Constants: {
+                    canvas: mockCanvas,
+                    ctx: mockCtx,
+                    CONSTANTS: {
+                        MARQUEE_DASH_SIZE: 5,
+                        LASSO_POINT_MIN_DISTANCE: 3
+                    }
+                },
+                State: {
+                    state: {
+                        startX: 0,
+                        startY: 0,
+                        zoomLevel: 1.0,
+                        tempCanvas: mockCtx.getImageData(0, 0, mockCanvas.width, mockCanvas.height),
+                        selection: null,
+                        clipboard: null,
+                        lassoPath: [],
+                        pasteMode: false,
+                        pasteImage: null,
+                        pasteX: 0,
+                        pasteY: 0
+                    }
+                },
+                Layers: {
+                    getActiveLayer: jest.fn(() => mockLayer),
+                    compositeAllLayers: jest.fn()
+                },
+                History: {
+                    saveState: jest.fn()
+                },
+                ZoomPan: {
+                    screenToCanvas: jest.fn((x, y) => ({ x, y }))
+                }
+            }
+        };
+
+        // Mock DOM elements
+        global.document = {
+            getElementById: jest.fn((id) => {
+                if (id === 'canvas') {
+                    return mockCanvas;
+                }
+                if (id === 'undo-btn' || id === 'redo-btn') {
+                    return { disabled: false };
+                }
+                return null;
+            }),
+            querySelector: jest.fn((selector) => {
+                if (selector === '.canvas-container') {
+                    return {
+                        getBoundingClientRect: jest.fn(() => ({
+                            left: 0,
+                            top: 0,
+                            width: 800,
+                            height: 600
+                        }))
+                    };
+                }
+                return null;
+            }),
+            createElement: jest.fn((tag) => {
+                if (tag === 'canvas') {
+                    return {
+                        width: 0,
+                        height: 0,
+                        getContext: jest.fn(() => mockCtx)
+                    };
+                }
+                return null;
+            })
+        };
+
+        // Load dependency modules first
+        require('../js/app-constants.js');
+        require('../js/app-state.js');
+        require('../js/layer-core.js');
+
+        // Load the module
+        require('../js/selection-tools.js');
+    });
+
+    beforeEach(() => {
+        // Reset mock function calls
+        jest.clearAllMocks();
+
+        // Reset state for each test
+        window.App.State.state.startX = 0;
+        window.App.State.state.startY = 0;
+        window.App.State.state.selection = null;
+        window.App.State.state.clipboard = null;
+        window.App.State.state.lassoPath = [];
+        window.App.State.state.pasteMode = false;
+    });
+
+    // ============================
+    // Point in Polygon Tests
+    // ============================
+
+    describe('pointInPolygon', () => {
+        it('should return true for point inside square', () => {
+            const square = [
+                { x: 0, y: 0 },
+                { x: 100, y: 0 },
+                { x: 100, y: 100 },
+                { x: 0, y: 100 }
+            ];
+
+            expect(window.App.SelectionTools.pointInPolygon(50, 50, square)).toBe(true);
+        });
+
+        it('should return false for point outside square', () => {
+            const square = [
+                { x: 0, y: 0 },
+                { x: 100, y: 0 },
+                { x: 100, y: 100 },
+                { x: 0, y: 100 }
+            ];
+
+            expect(window.App.SelectionTools.pointInPolygon(150, 150, square)).toBe(false);
+        });
+
+        it('should return true for point inside triangle', () => {
+            const triangle = [
+                { x: 50, y: 0 },
+                { x: 100, y: 100 },
+                { x: 0, y: 100 }
+            ];
+
+            expect(window.App.SelectionTools.pointInPolygon(50, 50, triangle)).toBe(true);
+        });
+
+        it('should return false for point outside triangle', () => {
+            const triangle = [
+                { x: 50, y: 0 },
+                { x: 100, y: 100 },
+                { x: 0, y: 100 }
+            ];
+
+            expect(window.App.SelectionTools.pointInPolygon(10, 10, triangle)).toBe(false);
+        });
+
+        it('should handle point on polygon edge', () => {
+            const square = [
+                { x: 0, y: 0 },
+                { x: 100, y: 0 },
+                { x: 100, y: 100 },
+                { x: 0, y: 100 }
+            ];
+
+            // Point on edge - can be inside or outside depending on algorithm
+            const result = window.App.SelectionTools.pointInPolygon(0, 50, square);
+            expect(typeof result).toBe('boolean');
+        });
+
+        it('should handle complex polygon', () => {
+            const polygon = [
+                { x: 0, y: 0 },
+                { x: 50, y: 25 },
+                { x: 100, y: 0 },
+                { x: 100, y: 100 },
+                { x: 0, y: 100 }
+            ];
+
+            expect(window.App.SelectionTools.pointInPolygon(50, 60, polygon)).toBe(true);
+        });
+    });
+
+    // ============================
+    // Selection Preview Tests
+    // ============================
+
+    describe('previewSelection', () => {
+        it('should draw selection marquee', () => {
+            window.App.State.state.startX = 100;
+            window.App.State.state.startY = 100;
+
+            window.App.SelectionTools.previewSelection(200, 200);
+
+            expect(mockCtx.putImageData).toHaveBeenCalled();
+            expect(mockCtx.setLineDash).toHaveBeenCalled();
+            expect(mockCtx.strokeRect).toHaveBeenCalledWith(100, 100, 100, 100);
+        });
+
+        it('should handle negative dimensions', () => {
+            window.App.State.state.startX = 200;
+            window.App.State.state.startY = 200;
+
+            window.App.SelectionTools.previewSelection(100, 100);
+
+            expect(mockCtx.strokeRect).toHaveBeenCalledWith(200, 200, -100, -100);
+        });
+
+        it('should reset line dash after drawing', () => {
+            window.App.State.state.startX = 100;
+            window.App.State.state.startY = 100;
+
+            window.App.SelectionTools.previewSelection(200, 200);
+
+            const calls = mockCtx.setLineDash.mock.calls;
+            expect(calls[calls.length - 1][0]).toEqual([]); // Last call should reset dash
+        });
+    });
+
+    // ============================
+    // Lasso Tool Tests
+    // ============================
+
+    describe('drawLassoPath', () => {
+        beforeEach(() => {
+            window.App.State.state.lassoPath = [{ x: 100, y: 100 }];
+        });
+
+        it('should add point to path when distance is sufficient', () => {
+            window.App.SelectionTools.drawLassoPath(110, 110);
+
+            expect(window.App.State.state.lassoPath.length).toBe(2);
+            expect(window.App.State.state.lassoPath[1]).toEqual({ x: 110, y: 110 });
+        });
+
+        it('should skip point when too close', () => {
+            window.App.SelectionTools.drawLassoPath(101, 101);
+
+            expect(window.App.State.state.lassoPath.length).toBe(1);
+        });
+
+        it('should draw lasso path preview', () => {
+            window.App.State.state.lassoPath = [
+                { x: 100, y: 100 },
+                { x: 150, y: 150 },
+                { x: 200, y: 100 }
+            ];
+
+            window.App.SelectionTools.drawLassoPath(250, 150);
+
+            expect(mockCtx.beginPath).toHaveBeenCalled();
+            expect(mockCtx.moveTo).toHaveBeenCalled();
+            expect(mockCtx.stroke).toHaveBeenCalled();
+        });
+    });
+
+    describe('finalizeLassoSelection', () => {
+        it('should not create selection with too few points', () => {
+            window.App.State.state.lassoPath = [{ x: 100, y: 100 }];
+
+            window.App.SelectionTools.finalizeLassoSelection();
+
+            expect(window.App.State.state.selection).toBeNull();
+            expect(window.App.State.state.lassoPath).toEqual([]);
+        });
+
+        it('should create selection with sufficient points', () => {
+            window.App.State.state.lassoPath = [
+                { x: 100, y: 100 },
+                { x: 200, y: 100 },
+                { x: 150, y: 200 }
+            ];
+
+            window.App.SelectionTools.finalizeLassoSelection();
+
+            expect(window.App.State.state.selection).not.toBeNull();
+            expect(window.App.State.state.selection.x).toBe(100);
+            expect(window.App.State.state.selection.y).toBe(100);
+            expect(window.App.State.state.selection.width).toBe(100);
+            expect(window.App.State.state.selection.height).toBe(100);
+        });
+
+        it('should calculate correct bounding box', () => {
+            window.App.State.state.lassoPath = [
+                { x: 50, y: 60 },
+                { x: 150, y: 70 },
+                { x: 100, y: 180 }
+            ];
+
+            window.App.SelectionTools.finalizeLassoSelection();
+
+            expect(window.App.State.state.selection.x).toBe(50);
+            expect(window.App.State.state.selection.y).toBe(60);
+            expect(window.App.State.state.selection.width).toBe(100);
+            expect(window.App.State.state.selection.height).toBe(120);
+        });
+
+        it('should store relative lasso path', () => {
+            window.App.State.state.lassoPath = [
+                { x: 100, y: 100 },
+                { x: 200, y: 100 },
+                { x: 150, y: 200 }
+            ];
+
+            window.App.SelectionTools.finalizeLassoSelection();
+
+            expect(window.App.State.state.selection.lassoPath).toEqual([
+                { x: 0, y: 0 },
+                { x: 100, y: 0 },
+                { x: 50, y: 100 }
+            ]);
+        });
+    });
+
+    // ============================
+    // Selection Marquee Tests
+    // ============================
+
+    describe('drawSelectionMarquee', () => {
+        it('should not draw if no selection exists', () => {
+            window.App.State.state.selection = null;
+
+            window.App.SelectionTools.drawSelectionMarquee();
+
+            expect(mockCtx.strokeRect).not.toHaveBeenCalled();
+        });
+
+        it('should draw rectangle marquee', () => {
+            window.App.State.state.selection = {
+                x: 100,
+                y: 100,
+                width: 200,
+                height: 150
+            };
+
+            window.App.SelectionTools.drawSelectionMarquee();
+
+            expect(mockCtx.strokeRect).toHaveBeenCalledWith(100, 100, 200, 150);
+        });
+
+        it('should draw lasso marquee', () => {
+            window.App.State.state.selection = {
+                x: 100,
+                y: 100,
+                width: 200,
+                height: 150,
+                lassoPathAbsolute: [
+                    { x: 100, y: 100 },
+                    { x: 300, y: 100 },
+                    { x: 200, y: 250 }
+                ]
+            };
+
+            window.App.SelectionTools.drawSelectionMarquee();
+
+            expect(mockCtx.beginPath).toHaveBeenCalled();
+            expect(mockCtx.closePath).toHaveBeenCalled();
+            expect(mockCtx.stroke).toHaveBeenCalled();
+        });
+
+        it('should adjust line width for zoom level', () => {
+            window.App.State.state.zoomLevel = 2.0;
+            window.App.State.state.selection = {
+                x: 100,
+                y: 100,
+                width: 200,
+                height: 150
+            };
+
+            window.App.SelectionTools.drawSelectionMarquee();
+
+            expect(mockCtx.lineWidth).toBe(0.5); // 1 / 2.0
+        });
+    });
+
+    // ============================
+    // Copy/Cut Tests
+    // ============================
+
+    describe('copySelection', () => {
+        it('should not copy if no selection exists', () => {
+            window.App.State.state.selection = null;
+
+            window.App.SelectionTools.copySelection();
+
+            expect(window.App.State.state.clipboard).toBeNull();
+        });
+
+        it('should copy rectangle selection', () => {
+            window.App.State.state.selection = {
+                x: 10,
+                y: 10,
+                width: 100,
+                height: 100
+            };
+
+            window.App.SelectionTools.copySelection();
+
+            expect(mockCtx.getImageData).toHaveBeenCalledWith(10, 10, 100, 100);
+            expect(window.App.State.state.clipboard).not.toBeNull();
+        });
+
+        it('should copy lasso selection with masking', () => {
+            window.App.State.state.selection = {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+                lassoPath: [
+                    { x: 25, y: 25 },
+                    { x: 75, y: 25 },
+                    { x: 50, y: 75 }
+                ]
+            };
+
+            const mockImageData = {
+                data: new Uint8ClampedArray(100 * 100 * 4).fill(255),
+                width: 100,
+                height: 100
+            };
+            mockCtx.getImageData = jest.fn(() => mockImageData);
+
+            window.App.SelectionTools.copySelection();
+
+            expect(window.App.State.state.clipboard).not.toBeNull();
+            // Check that some pixels were masked (alpha set to 0)
+            const hasTransparentPixels = Array.from(mockImageData.data).some((val, idx) =>
+                idx % 4 === 3 && val === 0
+            );
+            expect(hasTransparentPixels).toBe(true);
+        });
+    });
+
+    describe('cutSelection', () => {
+        it('should not cut if no selection exists', () => {
+            window.App.State.state.selection = null;
+
+            window.App.SelectionTools.cutSelection();
+
+            expect(window.App.State.state.clipboard).toBeNull();
+        });
+
+        it('should copy and erase rectangle selection', () => {
+            window.App.State.state.selection = {
+                x: 10,
+                y: 10,
+                width: 100,
+                height: 100
+            };
+
+            window.App.SelectionTools.cutSelection();
+
+            expect(window.App.State.state.clipboard).not.toBeNull();
+            expect(mockCtx.fillRect).toHaveBeenCalledWith(10, 10, 100, 100);
+            expect(window.App.State.state.selection).toBeNull();
+        });
+
+        it('should save state after cut', () => {
+            window.App.State.state.selection = {
+                x: 10,
+                y: 10,
+                width: 100,
+                height: 100
+            };
+
+            window.App.SelectionTools.cutSelection();
+
+            expect(window.App.History.saveState).toHaveBeenCalled();
+        });
+    });
+
+    // ============================
+    // Paste Tests
+    // ============================
+
+    describe('pasteFromClipboard', () => {
+        it('should not paste if clipboard is empty', () => {
+            window.App.State.state.clipboard = null;
+
+            window.App.SelectionTools.pasteFromClipboard();
+
+            expect(window.App.State.state.pasteMode).toBe(false);
+        });
+
+        it('should enter paste mode with clipboard data', () => {
+            const mockClipboard = {
+                data: new Uint8ClampedArray(100 * 100 * 4),
+                width: 100,
+                height: 100
+            };
+            window.App.State.state.clipboard = mockClipboard;
+
+            window.App.SelectionTools.pasteFromClipboard();
+
+            expect(window.App.State.state.pasteMode).toBe(true);
+            expect(window.App.State.state.pasteImage).toBe(mockClipboard);
+        });
+
+        it('should calculate paste position at viewport center', () => {
+            const mockClipboard = {
+                data: new Uint8ClampedArray(100 * 100 * 4),
+                width: 100,
+                height: 100
+            };
+            window.App.State.state.clipboard = mockClipboard;
+            window.App.ZoomPan.screenToCanvas = jest.fn(() => ({ x: 400, y: 300 }));
+
+            window.App.SelectionTools.pasteFromClipboard();
+
+            expect(window.App.State.state.pasteX).toBe(350); // 400 - 100/2
+            expect(window.App.State.state.pasteY).toBe(250); // 300 - 100/2
+        });
+
+        it('should clamp paste position within canvas bounds', () => {
+            const mockClipboard = {
+                data: new Uint8ClampedArray(100 * 100 * 4),
+                width: 100,
+                height: 100
+            };
+            window.App.State.state.clipboard = mockClipboard;
+            window.App.ZoomPan.screenToCanvas = jest.fn(() => ({ x: 10, y: 10 }));
+
+            window.App.SelectionTools.pasteFromClipboard();
+
+            expect(window.App.State.state.pasteX).toBe(0); // Clamped to 0
+            expect(window.App.State.state.pasteY).toBe(0); // Clamped to 0
+        });
+    });
+
+    describe('redrawWithPaste', () => {
+        it('should not redraw if not in paste mode', () => {
+            window.App.State.state.pasteMode = false;
+
+            window.App.SelectionTools.redrawWithPaste();
+
+            expect(mockCtx.putImageData).not.toHaveBeenCalled();
+        });
+
+        it('should draw paste image and outline', () => {
+            window.App.State.state.pasteMode = true;
+            window.App.State.state.pasteImage = {
+                data: new Uint8ClampedArray(100 * 100 * 4),
+                width: 100,
+                height: 100
+            };
+            window.App.State.state.pasteX = 50;
+            window.App.State.state.pasteY = 50;
+
+            window.App.SelectionTools.redrawWithPaste();
+
+            expect(mockCtx.putImageData).toHaveBeenCalledTimes(2);
+            expect(mockCtx.strokeRect).toHaveBeenCalledWith(50, 50, 100, 100);
+        });
+    });
+
+    describe('commitPaste', () => {
+        it('should not commit if not in paste mode', () => {
+            window.App.State.state.pasteMode = false;
+
+            window.App.SelectionTools.commitPaste();
+
+            expect(mockCtx.putImageData).not.toHaveBeenCalled();
+        });
+
+        it('should paste to active layer and exit paste mode', () => {
+            window.App.State.state.pasteMode = true;
+            window.App.State.state.pasteImage = {
+                data: new Uint8ClampedArray(100 * 100 * 4),
+                width: 100,
+                height: 100
+            };
+            window.App.State.state.pasteX = 50;
+            window.App.State.state.pasteY = 50;
+
+            window.App.SelectionTools.commitPaste();
+
+            expect(mockLayer.ctx.putImageData).toHaveBeenCalled();
+            expect(window.App.State.state.pasteMode).toBe(false);
+            expect(window.App.State.state.pasteImage).toBeNull();
+        });
+
+        it('should save state after commit', () => {
+            window.App.State.state.pasteMode = true;
+            window.App.State.state.pasteImage = {
+                data: new Uint8ClampedArray(100 * 100 * 4),
+                width: 100,
+                height: 100
+            };
+
+            window.App.SelectionTools.commitPaste();
+
+            expect(window.App.History.saveState).toHaveBeenCalled();
+        });
+    });
+});

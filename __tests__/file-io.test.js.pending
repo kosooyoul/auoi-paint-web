@@ -1,0 +1,626 @@
+/**
+ * file-io.test.js
+ * Tests for file I/O module
+ */
+
+describe('File I/O System', () => {
+    let mockCanvas, mockCtx, mockLayer, mockLoadingOverlay;
+
+    beforeAll(() => {
+
+        // Setup mock canvas and context
+        mockCanvas = {
+            width: 800,
+            height: 600,
+            toBlob: jest.fn((callback, mimeType, quality) => {
+                // Simulate blob creation
+                const blob = new Blob(['mock image data'], { type: mimeType });
+                setTimeout(() => callback(blob), 0);
+            })
+        };
+
+        mockCtx = {
+            fillStyle: '',
+            fillRect: jest.fn(),
+            drawImage: jest.fn(),
+            getImageData: jest.fn(() => ({
+                data: new Uint8ClampedArray(mockCanvas.width * mockCanvas.height * 4),
+                width: mockCanvas.width,
+                height: mockCanvas.height
+            })),
+            putImageData: jest.fn()
+        };
+
+        // Add getContext to mockCanvas
+        mockCanvas.getContext = jest.fn(() => mockCtx);
+
+        mockLayer = {
+            id: 'test-layer',
+            canvas: mockCanvas,
+            ctx: mockCtx,
+            name: 'Test Layer',
+            visible: true,
+            opacity: 1.0
+        };
+
+        // Mock loading overlay
+        mockLoadingOverlay = {
+            classList: {
+                add: jest.fn(),
+                remove: jest.fn()
+            },
+            querySelector: jest.fn(() => ({
+                textContent: ''
+            }))
+        };
+
+        // Setup global App namespace
+        global.window = {
+            App: {
+                Constants: {
+                    canvas: mockCanvas,
+                    ctx: mockCtx
+                },
+                State: {
+                    state: {
+                        layers: [mockLayer],
+                        activeLayerIndex: 0,
+                        selection: null,
+                        exportFormat: 'png',
+                        exportQuality: 0.9,
+                        compositeCanvas: mockCanvas
+                    }
+                },
+                Layers: {
+                    getActiveLayer: jest.fn(() => mockLayer),
+                    compositeAllLayers: jest.fn(),
+                    createEmptyLayer: jest.fn((name) => ({
+                        id: 'new-layer',
+                        canvas: mockCanvas,
+                        ctx: mockCtx,
+                        name: name,
+                        visible: true,
+                        opacity: 1.0
+                    }))
+                },
+                LayerUI: {
+                    updateActiveLayerThumbnail: jest.fn()
+                },
+                History: {
+                    saveState: jest.fn()
+                },
+                UI: {
+                    resetZoom: jest.fn()
+                }
+            },
+            URL: {
+                createObjectURL: jest.fn(() => 'blob:mock-url'),
+                revokeObjectURL: jest.fn()
+            },
+            Image: class MockImage {
+                constructor() {
+                    this.onload = null;
+                    this.onerror = null;
+                    this._src = '';
+                }
+                set src(value) {
+                    this._src = value;
+                    // Simulate successful load
+                    if (this.onload) {
+                        setTimeout(() => {
+                            this.width = 100;
+                            this.height = 100;
+                            this.onload();
+                        }, 0);
+                    }
+                }
+                get src() {
+                    return this._src;
+                }
+            },
+            FileReader: class MockFileReader {
+                constructor() {
+                    this.onload = null;
+                    this.onerror = null;
+                }
+                readAsDataURL(file) {
+                    if (this.onload) {
+                        setTimeout(() => {
+                            this.onload({
+                                target: { result: 'data:image/png;base64,mockdata' }
+                            });
+                        }, 0);
+                    }
+                }
+            },
+            confirm: jest.fn(() => true),
+            alert: jest.fn()
+        };
+
+        // Mock DOM elements
+        global.document = {
+            getElementById: jest.fn((id) => {
+                if (id === 'canvas') {
+                    return mockCanvas;
+                }
+                if (id === 'loading-overlay') {
+                    return mockLoadingOverlay;
+                }
+                if (id === 'file-input') {
+                    return { click: jest.fn() };
+                }
+                if (id === 'canvas-width') {
+                    return { value: '1000' };
+                }
+                if (id === 'canvas-height') {
+                    return { value: '800' };
+                }
+                if (id === 'undo-btn' || id === 'redo-btn') {
+                    return { disabled: false };
+                }
+                return null;
+            }),
+            querySelector: jest.fn((selector) => {
+                if (selector === 'input[name="resize-mode"]:checked') {
+                    return { value: 'scale' };
+                }
+                if (selector === '.canvas-container') {
+                    return {
+                        classList: {
+                            add: jest.fn(),
+                            remove: jest.fn()
+                        }
+                    };
+                }
+                return null;
+            }),
+            createElement: jest.fn((tag) => {
+                if (tag === 'a') {
+                    return {
+                        href: '',
+                        download: '',
+                        click: jest.fn()
+                    };
+                }
+                if (tag === 'canvas') {
+                    return {
+                        width: 0,
+                        height: 0,
+                        getContext: jest.fn(() => mockCtx)
+                    };
+                }
+                return null;
+            })
+        };
+
+        global.Blob = class MockBlob {
+            constructor(data, options) {
+                this.data = data;
+                this.type = options?.type || '';
+            }
+        };
+
+        global.setTimeout = jest.fn((callback) => callback());
+
+        // Load dependency modules first
+        require('../js/app-constants.js');
+        require('../js/app-state.js');
+        require('../js/layer-core.js');
+
+        // Load the module
+        require('../js/file-io.js');
+    });
+
+    beforeEach(() => {
+        // Reset mock function calls
+        jest.clearAllMocks();
+
+        // Mock timers for async operations
+        jest.useFakeTimers();
+
+        // Reset state for each test
+        window.App.State.state.exportFormat = 'png';
+        window.App.State.state.exportQuality = 0.9;
+        window.App.State.state.selection = null;
+        window.App.State.state.layers = [mockLayer];
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    // ============================
+    // Loading Indicator Tests
+    // ============================
+
+    describe('showLoading', () => {
+        it('should show loading overlay', () => {
+            window.App.FileIO.showLoading('Test message');
+
+            expect(mockLoadingOverlay.classList.add).toHaveBeenCalledWith('active');
+        });
+
+        it('should set custom message', () => {
+            const textElement = { textContent: '' };
+            mockLoadingOverlay.querySelector = jest.fn(() => textElement);
+
+            window.App.FileIO.showLoading('Custom message');
+
+            expect(textElement.textContent).toBe('Custom message');
+        });
+
+        it('should use default message if not provided', () => {
+            const textElement = { textContent: '' };
+            mockLoadingOverlay.querySelector = jest.fn(() => textElement);
+
+            window.App.FileIO.showLoading();
+
+            expect(textElement.textContent).toBe('Processing...');
+        });
+    });
+
+    describe('hideLoading', () => {
+        it('should hide loading overlay', () => {
+            window.App.FileIO.hideLoading();
+
+            expect(mockLoadingOverlay.classList.remove).toHaveBeenCalledWith('active');
+        });
+    });
+
+    describe('withLoading', () => {
+        it('should execute operation with loading indicator', async () => {
+            const mockOperation = jest.fn(() => Promise.resolve('result'));
+
+            const promise = window.App.FileIO.withLoading(mockOperation, 'Test');
+            jest.runAllTimers();
+            const result = await promise;
+
+            expect(mockOperation).toHaveBeenCalled();
+            expect(result).toBe('result');
+        });
+
+        it('should hide loading even if operation fails', async () => {
+            const mockOperation = jest.fn(() => Promise.reject(new Error('test error')));
+
+            try {
+                const promise = window.App.FileIO.withLoading(mockOperation);
+                jest.runAllTimers();
+                await promise;
+            } catch (e) {
+                // Expected error
+            }
+
+            expect(mockLoadingOverlay.classList.remove).toHaveBeenCalledWith('active');
+        });
+    });
+
+    // ============================
+    // Canvas Operations Tests
+    // ============================
+
+    describe('clearCanvas', () => {
+        it('should not clear if user cancels', () => {
+            global.window.confirm = jest.fn(() => false);
+            const originalLayerCount = window.App.State.state.layers.length;
+
+            window.App.FileIO.clearCanvas();
+
+            expect(window.App.State.state.layers.length).toBe(originalLayerCount);
+        });
+
+        it('should clear all layers and create new background', () => {
+            global.window.confirm = jest.fn(() => true);
+
+            window.App.FileIO.clearCanvas();
+
+            expect(window.App.State.state.layers.length).toBe(1);
+            expect(window.App.State.state.activeLayerIndex).toBe(0);
+            expect(window.App.State.state.selection).toBeNull();
+            expect(mockCtx.fillStyle).toBe('white');
+            expect(mockCtx.fillRect).toHaveBeenCalledWith(0, 0, 800, 600);
+        });
+
+        it('should save state after clearing', () => {
+            global.window.confirm = jest.fn(() => true);
+
+            window.App.FileIO.clearCanvas();
+
+            expect(window.App.History.saveState).toHaveBeenCalled();
+        });
+    });
+
+    describe('saveImage', () => {
+        it('should save image with PNG format', async () => {
+            window.App.State.state.exportFormat = 'png';
+
+            const promise = window.App.FileIO.saveImage();
+            jest.runAllTimers();
+            await promise;
+
+            expect(mockCanvas.toBlob).toHaveBeenCalled();
+            const call = mockCanvas.toBlob.mock.calls[0];
+            expect(call[1]).toBe('image/png');
+        });
+
+        it('should save image with JPEG format', async () => {
+            window.App.State.state.exportFormat = 'jpeg';
+            window.App.State.state.exportQuality = 0.8;
+
+            const promise = window.App.FileIO.saveImage();
+            jest.runAllTimers();
+            await promise;
+
+            const call = mockCanvas.toBlob.mock.calls[0];
+            expect(call[1]).toBe('image/jpeg');
+            expect(call[2]).toBe(0.8);
+        });
+
+        it('should save image with WebP format', async () => {
+            window.App.State.state.exportFormat = 'webp';
+
+            const promise = window.App.FileIO.saveImage();
+            jest.runAllTimers();
+            await promise;
+
+            const call = mockCanvas.toBlob.mock.calls[0];
+            expect(call[1]).toBe('image/webp');
+        });
+
+        it('should create download link', async () => {
+            const mockAnchor = { href: '', download: '', click: jest.fn() };
+            document.createElement = jest.fn(() => mockAnchor);
+
+            const promise = window.App.FileIO.saveImage();
+            jest.runAllTimers();
+            await promise;
+
+            expect(mockAnchor.href).toBe('blob:mock-url');
+            expect(mockAnchor.download).toMatch(/^paint-\d+\.png$/);
+            expect(mockAnchor.click).toHaveBeenCalled();
+        });
+    });
+
+    // ============================
+    // File Loading Tests
+    // ============================
+
+    describe('openImageFile', () => {
+        it('should trigger file input click', async () => {
+            const mockFileInput = { click: jest.fn() };
+            document.getElementById = jest.fn(() => mockFileInput);
+
+            await window.App.FileIO.openImageFile();
+
+            expect(mockFileInput.click).toHaveBeenCalled();
+        });
+    });
+
+    describe('loadImageFromFile', () => {
+        it('should reject non-image files', async () => {
+            const mockFile = { type: 'text/plain', name: 'test.txt' };
+
+            await window.App.FileIO.loadImageFromFile(mockFile);
+
+            expect(window.alert).toHaveBeenCalledWith(
+                expect.stringContaining('valid image file')
+            );
+        });
+
+        it('should load valid image file', async () => {
+            const mockFile = { type: 'image/png', name: 'test.png' };
+
+            const promise = window.App.FileIO.loadImageFromFile(mockFile);
+            jest.runAllTimers();
+            await promise;
+
+            expect(mockCtx.drawImage).toHaveBeenCalled();
+            expect(window.App.History.saveState).toHaveBeenCalled();
+        });
+
+        it('should center smaller images', async () => {
+            const mockFile = { type: 'image/png', name: 'test.png' };
+            // Image size is 100x100 (set in MockImage), canvas is 800x600
+
+            const promise = window.App.FileIO.loadImageFromFile(mockFile);
+            jest.runAllTimers();
+            await promise;
+
+            const drawCall = mockCtx.drawImage.mock.calls[0];
+            expect(drawCall[1]).toBe(350); // (800 - 100) / 2
+            expect(drawCall[2]).toBe(250); // (600 - 100) / 2
+        });
+
+        it('should clear file input after loading', async () => {
+            const mockFile = { type: 'image/png', name: 'test.png' };
+            const mockInput = { value: 'test.png' };
+
+            const promise = window.App.FileIO.loadImageFromFile(mockFile, mockInput);
+            jest.runAllTimers();
+            await promise;
+
+            expect(mockInput.value).toBe('');
+        });
+    });
+
+    describe('handleFileSelect', () => {
+        it('should handle file selection', () => {
+            const mockFile = { type: 'image/png', name: 'test.png' };
+            const mockEvent = {
+                target: {
+                    files: [mockFile],
+                    value: 'test.png'
+                }
+            };
+
+            window.App.FileIO.handleFileSelect(mockEvent);
+
+            // Just verify it doesn't throw
+            expect(true).toBe(true);
+        });
+
+        it('should do nothing if no file selected', () => {
+            const mockEvent = {
+                target: { files: [] }
+            };
+
+            window.App.FileIO.handleFileSelect(mockEvent);
+
+            expect(window.alert).not.toHaveBeenCalled();
+        });
+    });
+
+    // ============================
+    // Drag and Drop Tests
+    // ============================
+
+    describe('handleDragEnter', () => {
+        it('should add drag-over class', () => {
+            const mockContainer = {
+                classList: { add: jest.fn(), remove: jest.fn() }
+            };
+            document.querySelector = jest.fn(() => mockContainer);
+
+            const mockEvent = {
+                preventDefault: jest.fn(),
+                stopPropagation: jest.fn()
+            };
+
+            window.App.FileIO.handleDragEnter(mockEvent);
+
+            expect(mockEvent.preventDefault).toHaveBeenCalled();
+            expect(mockContainer.classList.add).toHaveBeenCalledWith('drag-over');
+        });
+    });
+
+    describe('handleDragOver', () => {
+        it('should prevent default behavior', () => {
+            const mockEvent = {
+                preventDefault: jest.fn(),
+                stopPropagation: jest.fn()
+            };
+
+            window.App.FileIO.handleDragOver(mockEvent);
+
+            expect(mockEvent.preventDefault).toHaveBeenCalled();
+        });
+    });
+
+    describe('handleDragLeave', () => {
+        it('should remove drag-over class from container', () => {
+            const mockContainer = {
+                classList: { add: jest.fn(), remove: jest.fn(), contains: jest.fn(() => true) }
+            };
+            document.querySelector = jest.fn(() => mockContainer);
+
+            const mockEvent = {
+                preventDefault: jest.fn(),
+                stopPropagation: jest.fn(),
+                target: { classList: { contains: jest.fn(() => true) } }
+            };
+
+            window.App.FileIO.handleDragLeave(mockEvent);
+
+            expect(mockContainer.classList.remove).toHaveBeenCalledWith('drag-over');
+        });
+    });
+
+    describe('handleDrop', () => {
+        it('should load dropped image file', () => {
+            const mockFile = { type: 'image/png', name: 'dropped.png' };
+            const mockContainer = {
+                classList: { add: jest.fn(), remove: jest.fn() }
+            };
+            document.querySelector = jest.fn(() => mockContainer);
+
+            const mockEvent = {
+                preventDefault: jest.fn(),
+                stopPropagation: jest.fn(),
+                dataTransfer: { files: [mockFile] }
+            };
+
+            window.App.FileIO.handleDrop(mockEvent);
+
+            expect(mockEvent.preventDefault).toHaveBeenCalled();
+            expect(mockContainer.classList.remove).toHaveBeenCalledWith('drag-over');
+        });
+
+        it('should do nothing if no files dropped', () => {
+            const mockEvent = {
+                preventDefault: jest.fn(),
+                stopPropagation: jest.fn(),
+                dataTransfer: { files: [] }
+            };
+
+            window.App.FileIO.handleDrop(mockEvent);
+
+            expect(window.alert).not.toHaveBeenCalled();
+        });
+    });
+
+    // ============================
+    // Canvas Resize Tests
+    // ============================
+
+    describe('resizeCanvas', () => {
+        it('should reject invalid dimensions', async () => {
+            document.getElementById = jest.fn((id) => {
+                if (id === 'canvas-width') return { value: '50' }; // Too small
+                if (id === 'canvas-height') return { value: '800' };
+                return null;
+            });
+
+            await window.App.FileIO.resizeCanvas();
+
+            expect(window.alert).toHaveBeenCalledWith(
+                expect.stringContaining('valid dimensions')
+            );
+        });
+
+        it('should not resize if user cancels', async () => {
+            global.window.confirm = jest.fn(() => false);
+            const originalWidth = mockCanvas.width;
+
+            await window.App.FileIO.resizeCanvas();
+
+            expect(mockCanvas.width).toBe(originalWidth);
+        });
+
+        it('should resize canvas in scale mode', async () => {
+            global.window.confirm = jest.fn(() => true);
+            document.querySelector = jest.fn((selector) => {
+                if (selector === 'input[name="resize-mode"]:checked') {
+                    return { value: 'scale' };
+                }
+                return { classList: { add: jest.fn(), remove: jest.fn() } };
+            });
+
+            const promise = window.App.FileIO.resizeCanvas();
+            jest.runAllTimers();
+            await promise;
+
+            expect(window.App.State.state.layers[0].canvas.width).toBe(1000);
+            expect(window.App.State.state.layers[0].canvas.height).toBe(800);
+        });
+
+        it('should clear selection after resize', async () => {
+            global.window.confirm = jest.fn(() => true);
+            window.App.State.state.selection = { x: 0, y: 0, width: 100, height: 100 };
+
+            const promise = window.App.FileIO.resizeCanvas();
+            jest.runAllTimers();
+            await promise;
+
+            expect(window.App.State.state.selection).toBeNull();
+        });
+
+        it('should save state after resize', async () => {
+            global.window.confirm = jest.fn(() => true);
+
+            const promise = window.App.FileIO.resizeCanvas();
+            jest.runAllTimers();
+            await promise;
+
+            expect(window.App.History.saveState).toHaveBeenCalled();
+        });
+    });
+});
