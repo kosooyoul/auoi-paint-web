@@ -335,9 +335,9 @@ if (typeof webgazer !== 'undefined') {
 
     console.log('👁️ Eye Tracking PoC loaded. Use window.eyeTrackingPoC to control.');
 } else {
-    console.warn('⚠️ WebGazer.js not loaded yet. Eye tracking will be unavailable.');
+    console.warn('⚠️ WebGazer.js not loaded yet. Waiting...');
 
-    // WebGazer 로딩을 기다림 (최대 10초)
+    // WebGazer 로딩을 기다림 (최대 30초)
     let attempts = 0;
     const checkWebGazer = setInterval(() => {
         attempts++;
@@ -345,10 +345,17 @@ if (typeof webgazer !== 'undefined') {
             clearInterval(checkWebGazer);
             window.eyeTrackingPoC = new EyeTrackingPoC();
             window.eyeTrackingPoC.enableClickCalibration();
-            console.log('✅ WebGazer.js loaded (after ' + attempts + ' attempts). Eye Tracking PoC ready.');
-        } else if (attempts >= 20) { // 10초 (500ms * 20)
+            console.log('✅ WebGazer.js loaded (after ' + (attempts * 0.5) + ' seconds). Eye Tracking PoC ready.');
+        } else if (attempts >= 60) { // 30초 (500ms * 60)
             clearInterval(checkWebGazer);
-            console.error('❌ WebGazer.js failed to load after 10 seconds.');
+            console.error('❌ WebGazer.js failed to load after 30 seconds.');
+            console.error('Possible causes:');
+            console.error('1. CDN is blocked or slow');
+            console.error('2. Internet connection issue');
+            console.error('3. Ad blocker blocking the CDN');
+            console.error('Try refreshing the page or check your internet connection.');
+        } else if (attempts % 10 === 0) {
+            console.log('⏳ Still waiting for WebGazer.js... (' + (attempts * 0.5) + ' seconds)');
         }
     }, 500);
 }
