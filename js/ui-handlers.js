@@ -155,6 +155,9 @@ function setupEventListeners() {
     document.getElementById('btn-help').addEventListener('click', toggleHelpModal);
     document.getElementById('btn-resize').addEventListener('click', App.FileIO.resizeCanvas);
 
+    // Eye Tracking toggle (PoC)
+    document.getElementById('btn-eye-tracking').addEventListener('click', toggleEyeTracking);
+
     // Theme toggle
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 
@@ -788,6 +791,30 @@ function closeHelpModal() {
     modal.classList.remove('active');
 }
 
+// Eye Tracking Toggle (PoC)
+function toggleEyeTracking() {
+    if (!window.eyeTrackingPoC) {
+        console.error('Eye Tracking PoC not loaded');
+        return;
+    }
+
+    const btn = document.getElementById('btn-eye-tracking');
+
+    if (!window.eyeTrackingPoC.isActive) {
+        // Start eye tracking
+        window.eyeTrackingPoC.start();
+        btn.classList.add('active');
+        btn.style.background = '#4CAF50';
+        btn.style.color = 'white';
+    } else {
+        // Stop eye tracking
+        window.eyeTrackingPoC.stop();
+        btn.classList.remove('active');
+        btn.style.background = '';
+        btn.style.color = '';
+    }
+}
+
 // Text Tool Functions
 function showTextInput(canvasX, canvasY, screenX, screenY) {
     const textInput = document.getElementById('text-input');
@@ -1021,6 +1048,7 @@ function loadTheme() {
         cancelText,
         toggleHelpModal,
         closeHelpModal,
+        toggleEyeTracking,
         setupFloatingToolbox,
         toggleToolboxVisibility,
         saveToolboxPosition,
