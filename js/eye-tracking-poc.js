@@ -28,11 +28,19 @@ class EyeTrackingPoC {
             return true;
         }
 
+        // WebGazer 라이브러리 로딩 확인
+        if (typeof webgazer === 'undefined') {
+            console.error('❌ WebGazer.js not loaded. Check CDN connection.');
+            alert('WebGazer.js 라이브러리 로딩 실패.\n인터넷 연결을 확인하거나 페이지를 새로고침해주세요.');
+            return false;
+        }
+
         try {
             console.log('Initializing WebGazer...');
+            console.log('Requesting webcam permission...');
 
-            // WebGazer 초기화
-            await webgazer
+            // WebGazer 초기화 (웹캠 권한 요청 포함)
+            const result = await webgazer
                 .setGazeListener((data, timestamp) => {
                     if (data == null || !this.isActive) return;
 
@@ -44,6 +52,11 @@ class EyeTrackingPoC {
                     this.updateGazeCursor();
                 })
                 .begin();
+
+            console.log('WebGazer.begin() result:', result);
+
+            // 초기화 완료 후 잠시 대기 (WebGazer 안정화)
+            await new Promise(resolve => setTimeout(resolve, 1000));
 
             // WebGazer 설정
             webgazer.showVideoPreview(true)      // 웹캠 미리보기 표시
@@ -59,7 +72,26 @@ class EyeTrackingPoC {
             return true;
         } catch (error) {
             console.error('❌ Failed to initialize eye tracking:', error);
-            alert('Eye tracking 초기화 실패. 웹캠 권한을 확인해주세요.');
+            console.error('Error details:', {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+            });
+
+            // 더 구체적인 에러 메시지
+            let errorMessage = 'Eye tracking 초기화 실패.\n\n';
+
+            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                errorMessage += '웹캠 권한이 거부되었습니다.\n브라우저 설정에서 카메라 권한을 허용해주세요.';
+            } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+                errorMessage += '웹캠을 찾을 수 없습니다.\n웹캠이 연결되어 있는지 확인해주세요.';
+            } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+                errorMessage += '웹캠이 다른 프로그램에서 사용 중입니다.\n다른 프로그램을 종료하고 다시 시도해주세요.';
+            } else {
+                errorMessage += '알 수 없는 오류가 발생했습니다.\n콘솔(F12)에서 에러 메시지를 확인해주세요.\n\n' + error.message;
+            }
+
+            alert(errorMessage);
             return false;
         }
     }
@@ -293,10 +325,30 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// 전역 인스턴스 생성
-window.eyeTrackingPoC = new EyeTrackingPoC();
+// WebGazer 로딩 대기 후 초기화
+if (typeof webgazer !== 'undefined') {
+    // 전역 인스턴스 생성
+    window.eyeTrackingPoC = new EyeTrackingPoC();
 
-// 클릭 보정 활성화
-window.eyeTrackingPoC.enableClickCalibration();
+    // 클릭 보정 활성화
+    window.eyeTrackingPoC.enableClickCalibration();
 
-console.log('👁️ Eye Tracking PoC loaded. Use window.eyeTrackingPoC to control.');
+    console.log('👁️ Eye Tracking PoC loaded. Use window.eyeTrackingPoC to control.');
+} else {
+    console.warn('⚠️ WebGazer.js not loaded yet. Eye tracking will be unavailable.');
+
+    // WebGazer 로딩을 기다림 (최대 10초)
+    let attempts = 0;
+    const checkWebGazer = setInterval(() => {
+        attempts++;
+        if (typeof webgazer !== 'undefined') {
+            clearInterval(checkWebGazer);
+            window.eyeTrackingPoC = new EyeTrackingPoC();
+            window.eyeTrackingPoC.enableClickCalibration();
+            console.log('✅ WebGazer.js loaded (after ' + attempts + ' attempts). Eye Tracking PoC ready.');
+        } else if (attempts >= 20) { // 10초 (500ms * 20)
+            clearInterval(checkWebGazer);
+            console.error('❌ WebGazer.js failed to load after 10 seconds.');
+        }
+    }, 500);
+}
