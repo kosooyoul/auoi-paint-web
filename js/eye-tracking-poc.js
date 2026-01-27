@@ -39,6 +39,14 @@ class EyeTrackingPoC {
             console.log('Initializing WebGazer...');
             console.log('Requesting webcam permission...');
 
+            // CRITICAL: Set MediaPipe model path BEFORE initialization
+            // This prevents WebGazer from looking for files at the current domain
+            if (!webgazer.params.faceMeshModelPath) {
+                console.log('Setting MediaPipe model path...');
+                webgazer.params.faceMeshModelPath = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/';
+                console.log('MediaPipe path set to:', webgazer.params.faceMeshModelPath);
+            }
+
             // WebGazer 초기화 (웹캠 권한 요청 포함)
             const result = await webgazer
                 .setGazeListener((data, timestamp) => {
