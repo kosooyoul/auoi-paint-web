@@ -332,17 +332,22 @@
     </div>
 
     <!-- WebGazer.js for Eye Tracking (PoC) -->
-    <!-- Using Brown University CDN (official, most reliable) -->
-    <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
+    <!-- CRITICAL: Set MediaPipe path BEFORE loading WebGazer -->
     <script>
-        // Fix MediaPipe path before WebGazer initializes
-        if (typeof webgazer !== 'undefined') {
-            console.log('Setting MediaPipe model path...');
-            // Set the correct path for MediaPipe files
-            webgazer.params.faceMeshModelPath = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/';
-            console.log('MediaPipe path set to:', webgazer.params.faceMeshModelPath);
-        }
+        // Pre-configure WebGazer before it loads
+        window.webgazerPreConfig = {
+            // This will be picked up by WebGazer when it initializes
+            faceMeshModelPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/'
+        };
+        console.log('🔧 Pre-configuring WebGazer MediaPipe path:', window.webgazerPreConfig.faceMeshModelPath);
     </script>
+    <!-- Using Brown University CDN (official, most reliable) -->
+    <script src="https://webgazer.cs.brown.edu/webgazer.js"
+            onload="console.log('✅ WebGazer.js loaded');
+                    if (webgazer && webgazer.params) {
+                        webgazer.params.faceMeshModelPath = window.webgazerPreConfig.faceMeshModelPath;
+                        console.log('✅ MediaPipe path configured:', webgazer.params.faceMeshModelPath);
+                    }"></script>
 
     <!-- Core modules (no dependencies) -->
     <script src="js/app-constants.js"></script>

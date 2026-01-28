@@ -39,27 +39,44 @@ class EyeTrackingPoC {
             console.log('Initializing WebGazer...');
             console.log('Requesting webcam permission...');
 
-            // CRITICAL: Set MediaPipe model path BEFORE initialization
-            // This prevents WebGazer from looking for files at the current domain
-            if (!webgazer.params.faceMeshModelPath) {
-                console.log('Setting MediaPipe model path...');
-                webgazer.params.faceMeshModelPath = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/';
-                console.log('MediaPipe path set to:', webgazer.params.faceMeshModelPath);
+            // CRITICAL FIX: Force set MediaPipe path multiple times
+            // WebGazer seems to reset this during initialization
+            const mediaPipePath = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/';
+
+            console.log('🔧 Step 1: Setting MediaPipe path before any WebGazer calls...');
+            if (webgazer.params) {
+                webgazer.params.faceMeshModelPath = mediaPipePath;
+                console.log('✅ Set webgazer.params.faceMeshModelPath:', webgazer.params.faceMeshModelPath);
             }
 
+            // Also try setting on the window object (some versions of WebGazer check this)
+            if (!window.wasmPath) {
+                window.wasmPath = mediaPipePath;
+                console.log('✅ Set window.wasmPath:', window.wasmPath);
+            }
+
+            console.log('🔧 Step 2: Setting gaze listener...');
+            webgazer.setGazeListener((data, timestamp) => {
+                if (data == null || !this.isActive) return;
+
+                // 시선 좌표 업데이트
+                this.targetX = data.x;
+                this.targetY = data.y;
+
+                // 부드러운 움직임을 위한 스무딩
+                this.updateGazeCursor();
+            });
+
+            // Set MediaPipe path again right before begin()
+            console.log('🔧 Step 3: Re-setting MediaPipe path before begin()...');
+            if (webgazer.params) {
+                webgazer.params.faceMeshModelPath = mediaPipePath;
+                console.log('✅ Re-set webgazer.params.faceMeshModelPath');
+            }
+
+            console.log('🔧 Step 4: Calling webgazer.begin()...');
             // WebGazer 초기화 (웹캠 권한 요청 포함)
-            const result = await webgazer
-                .setGazeListener((data, timestamp) => {
-                    if (data == null || !this.isActive) return;
-
-                    // 시선 좌표 업데이트
-                    this.targetX = data.x;
-                    this.targetY = data.y;
-
-                    // 부드러운 움직임을 위한 스무딩
-                    this.updateGazeCursor();
-                })
-                .begin();
+            const result = await webgazer.begin();
 
             console.log('WebGazer.begin() result:', result);
 
