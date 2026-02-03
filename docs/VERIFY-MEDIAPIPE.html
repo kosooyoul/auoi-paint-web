@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaPipe 파일 접근성 검증</title>
+    <style>
+        body {
+            font-family: 'Consolas', 'Monaco', monospace;
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        h1 {
+            color: #4ec9b0;
+            border-bottom: 2px solid #4ec9b0;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #569cd6;
+            margin-top: 30px;
+        }
+        .test-section {
+            background: #2d2d2d;
+            border: 1px solid #3e3e3e;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .test-item {
+            display: flex;
+            align-items: center;
+            margin: 12px 0;
+            padding: 12px;
+            background: #252526;
+            border-radius: 4px;
+        }
+        .status {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+        .status.pending {
+            background: #858585;
+        }
+        .status.success {
+            background: #4ec9b0;
+        }
+        .status.error {
+            background: #f48771;
+        }
+        .file-name {
+            flex: 1;
+            font-weight: bold;
+            color: #ce9178;
+        }
+        .file-size {
+            color: #858585;
+            margin-left: 12px;
+            min-width: 80px;
+            text-align: right;
+        }
+        .status-text {
+            color: #858585;
+            margin-left: 12px;
+            min-width: 100px;
+        }
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #1177bb;
+        }
+        button:disabled {
+            background: #3e3e3e;
+            color: #858585;
+            cursor: not-allowed;
+        }
+        .summary {
+            background: #264f78;
+            border-left: 4px solid #569cd6;
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .summary.success {
+            background: #1e4d3e;
+            border-left-color: #4ec9b0;
+        }
+        .summary.error {
+            background: #5a1d1d;
+            border-left-color: #f48771;
+        }
+        .log {
+            background: #1e1e1e;
+            border: 1px solid #3e3e3e;
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 4px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .log-entry {
+            margin: 4px 0;
+        }
+        .log-entry.info {
+            color: #569cd6;
+        }
+        .log-entry.success {
+            color: #4ec9b0;
+        }
+        .log-entry.error {
+            color: #f48771;
+        }
+        .log-entry.warn {
+            color: #ce9178;
+        }
+        code {
+            background: #1e1e1e;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: inherit;
+        }
+        .url-display {
+            background: #1e1e1e;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 12px 0;
+            border-left: 3px solid #569cd6;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <h1>👁️ MediaPipe 파일 접근성 검증 도구</h1>
+
+    <div class="summary">
+        <strong>📋 목적</strong><br>
+        Eye Tracking PoC에 필요한 MediaPipe 파일들이 웹 서버에서 정상적으로 접근 가능한지 검증합니다.
+    </div>
+
+    <h2>🌐 테스트 대상 서버</h2>
+    <div class="test-section">
+        <label for="base-url" style="display: block; margin-bottom: 8px; color: #569cd6;">Base URL:</label>
+        <input type="text" id="base-url" value="https://paint.auoi.net"
+               style="width: 100%; padding: 10px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #3e3e3e; border-radius: 4px; font-family: inherit; font-size: 14px;">
+        <p style="color: #858585; font-size: 13px; margin-top: 8px;">
+            로컬 테스트: <code>http://127.0.0.1:5500</code> (Live Server)<br>
+            프로덕션: <code>https://paint.auoi.net</code>
+        </p>
+    </div>
+
+    <h2>📁 MediaPipe 파일 목록</h2>
+    <div class="test-section">
+        <div id="file-tests"></div>
+        <button id="btn-start-test" onclick="startTest()">🚀 검증 시작</button>
+        <button id="btn-test-direct" onclick="testDirectAccess()" style="margin-left: 12px;">🔗 브라우저에서 직접 열기</button>
+    </div>
+
+    <h2>📊 테스트 결과</h2>
+    <div id="summary-section"></div>
+
+    <h2>📝 상세 로그</h2>
+    <div class="log" id="log-output"></div>
+
+    <script>
+        const MEDIAPIPE_FILES = [
+            {
+                path: '/mediapipe/face_mesh/face_mesh.binarypb',
+                expectedSize: 939,
+                description: 'MediaPipe FaceMesh 모델 정의 파일'
+            },
+            {
+                path: '/mediapipe/face_mesh/face_mesh_solution_packed_assets_loader.js',
+                expectedSize: 8700,
+                description: 'MediaPipe 에셋 로더 JavaScript'
+            },
+            {
+                path: '/mediapipe/face_mesh/face_mesh_solution_simd_wasm_bin.js',
+                expectedSize: 322000,
+                description: 'MediaPipe WebAssembly 바이너리 (SIMD)'
+            }
+        ];
+
+        let testResults = [];
+
+        // 파일 목록 렌더링
+        function renderFileList() {
+            const container = document.getElementById('file-tests');
+            container.innerHTML = MEDIAPIPE_FILES.map((file, index) => `
+                <div class="test-item" id="test-${index}">
+                    <div class="status pending" id="status-${index}"></div>
+                    <div class="file-name">${file.path}</div>
+                    <div class="file-size" id="size-${index}">-</div>
+                    <div class="status-text" id="text-${index}">대기 중</div>
+                </div>
+            `).join('');
+        }
+
+        // 로그 추가
+        function addLog(message, type = 'info') {
+            const logOutput = document.getElementById('log-output');
+            const timestamp = new Date().toLocaleTimeString('ko-KR');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${timestamp}] ${message}`;
+            logOutput.appendChild(entry);
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+
+        // 파일 크기 포맷
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // 개별 파일 테스트
+        async function testFile(baseUrl, file, index) {
+            const url = baseUrl + file.path;
+            const statusEl = document.getElementById(`status-${index}`);
+            const sizeEl = document.getElementById(`size-${index}`);
+            const textEl = document.getElementById(`text-${index}`);
+
+            addLog(`테스트 시작: ${file.path}`, 'info');
+
+            try {
+                const response = await fetch(url, { method: 'HEAD' });
+
+                if (response.ok) {
+                    const contentLength = response.headers.get('Content-Length');
+                    const size = contentLength ? parseInt(contentLength) : 0;
+
+                    statusEl.className = 'status success';
+                    sizeEl.textContent = formatBytes(size);
+                    textEl.textContent = '✅ 성공';
+                    textEl.style.color = '#4ec9b0';
+
+                    const sizeMatch = size >= file.expectedSize * 0.9 && size <= file.expectedSize * 1.1;
+
+                    addLog(`✅ ${file.path} - ${response.status} ${response.statusText} (${formatBytes(size)})`, 'success');
+
+                    if (!sizeMatch) {
+                        addLog(`⚠️ 파일 크기 불일치: 예상 ${formatBytes(file.expectedSize)}, 실제 ${formatBytes(size)}`, 'warn');
+                    }
+
+                    return {
+                        file: file.path,
+                        success: true,
+                        status: response.status,
+                        size: size,
+                        url: url
+                    };
+                } else {
+                    statusEl.className = 'status error';
+                    textEl.textContent = `❌ ${response.status}`;
+                    textEl.style.color = '#f48771';
+
+                    addLog(`❌ ${file.path} - ${response.status} ${response.statusText}`, 'error');
+
+                    return {
+                        file: file.path,
+                        success: false,
+                        status: response.status,
+                        url: url
+                    };
+                }
+            } catch (error) {
+                statusEl.className = 'status error';
+                textEl.textContent = '❌ 실패';
+                textEl.style.color = '#f48771';
+
+                addLog(`❌ ${file.path} - 네트워크 오류: ${error.message}`, 'error');
+
+                return {
+                    file: file.path,
+                    success: false,
+                    error: error.message,
+                    url: url
+                };
+            }
+        }
+
+        // 전체 테스트 실행
+        async function startTest() {
+            const baseUrl = document.getElementById('base-url').value.trim();
+            if (!baseUrl) {
+                alert('Base URL을 입력해주세요.');
+                return;
+            }
+
+            // 초기화
+            document.getElementById('log-output').innerHTML = '';
+            document.getElementById('summary-section').innerHTML = '';
+            testResults = [];
+
+            const btn = document.getElementById('btn-start-test');
+            btn.disabled = true;
+            btn.textContent = '⏳ 검증 중...';
+
+            addLog(`🚀 테스트 시작: ${baseUrl}`, 'info');
+            addLog(`📁 총 ${MEDIAPIPE_FILES.length}개 파일 검증`, 'info');
+
+            // 순차 테스트
+            for (let i = 0; i < MEDIAPIPE_FILES.length; i++) {
+                const result = await testFile(baseUrl, MEDIAPIPE_FILES[i], i);
+                testResults.push(result);
+            }
+
+            // 결과 요약
+            showSummary();
+
+            btn.disabled = false;
+            btn.textContent = '🚀 검증 시작';
+        }
+
+        // 결과 요약 표시
+        function showSummary() {
+            const successCount = testResults.filter(r => r.success).length;
+            const totalCount = testResults.length;
+            const allSuccess = successCount === totalCount;
+
+            const summarySection = document.getElementById('summary-section');
+
+            if (allSuccess) {
+                summarySection.innerHTML = `
+                    <div class="summary success">
+                        <strong>✅ 모든 파일 접근 성공!</strong><br><br>
+                        ${totalCount}개 파일이 모두 정상적으로 로드 가능합니다.<br>
+                        Eye Tracking PoC를 사용할 수 있습니다.
+                    </div>
+                `;
+                addLog(`🎉 검증 완료: ${successCount}/${totalCount} 성공`, 'success');
+            } else {
+                const failedFiles = testResults.filter(r => !r.success);
+                summarySection.innerHTML = `
+                    <div class="summary error">
+                        <strong>❌ 일부 파일 접근 실패</strong><br><br>
+                        성공: ${successCount}/${totalCount}<br>
+                        실패한 파일:<br>
+                        ${failedFiles.map(f => `• ${f.file} (${f.status || 'Network Error'})`).join('<br>')}
+                        <br><br>
+                        <strong>⚠️ Eye Tracking PoC가 작동하지 않을 수 있습니다.</strong><br>
+                        배포 상태를 확인해주세요.
+                    </div>
+                `;
+                addLog(`⚠️ 검증 완료: ${successCount}/${totalCount} 성공, ${totalCount - successCount}개 실패`, 'error');
+            }
+
+            // 실패한 파일의 URL 표시
+            const failedFiles = testResults.filter(r => !r.success);
+            if (failedFiles.length > 0) {
+                failedFiles.forEach(f => {
+                    addLog(`🔗 실패한 URL: ${f.url}`, 'error');
+                });
+            }
+        }
+
+        // 브라우저에서 직접 열기
+        function testDirectAccess() {
+            const baseUrl = document.getElementById('base-url').value.trim();
+            if (!baseUrl) {
+                alert('Base URL을 입력해주세요.');
+                return;
+            }
+
+            addLog('🔗 브라우저 탭에서 MediaPipe 파일을 직접 엽니다...', 'info');
+
+            MEDIAPIPE_FILES.forEach((file, index) => {
+                const url = baseUrl + file.path;
+                setTimeout(() => {
+                    window.open(url, `_mediapipe_${index}`);
+                    addLog(`🔗 열기: ${url}`, 'info');
+                }, index * 500);
+            });
+
+            addLog('📌 각 탭에서 파일이 다운로드되거나 내용이 표시되면 성공입니다.', 'info');
+            addLog('📌 404 Not Found 페이지가 표시되면 배포 문제입니다.', 'warn');
+        }
+
+        // 초기화
+        renderFileList();
+        addLog('💡 Base URL을 입력하고 "검증 시작" 버튼을 클릭하세요.', 'info');
+        addLog('💡 로컬 테스트: http://127.0.0.1:5500 (Live Server)', 'info');
+        addLog('💡 프로덕션 테스트: https://paint.auoi.net', 'info');
+    </script>
+</body>
+</html>
